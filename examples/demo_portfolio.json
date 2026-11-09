@@ -1,0 +1,8 @@
+[
+  {"portfolio": "Erste-DM", "symbol": "AAPL", "name": "Apple Inc.", "shares": 10, "average_price": 200},
+  {"portfolio": "Erste-DM", "symbol": "MSFT", "name": "Microsoft Corporation", "shares": 5, "average_price": 400},
+  {"portfolio": "Erste-DM", "symbol": "AMZN", "name": "Amazon.com Inc.", "shares": 12, "average_price": 190},
+  {"portfolio": "XTB", "symbol": "NVDA", "name": "NVIDIA Corporation", "shares": 15.5, "average_price": 130},
+  {"portfolio": "XTB", "symbol": "GOOGL", "name": "Alphabet Inc.", "shares": 8, "average_price": 170},
+  {"portfolio": "XTB", "symbol": "MSFT", "name": "Microsoft Corporation", "shares": 2.5, "average_price": 420}
+]
