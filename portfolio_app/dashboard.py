@@ -12,6 +12,8 @@ from portfolio_app.investing_data import BENCHMARKS, fetch_benchmarks
 from portfolio_app.crude_oil import fetch_crude_oil
 from portfolio_app.holdings_table import column_metadata, render_table
 from portfolio_app.company_news import fetch_news_batch, select_headlines
+from portfolio_app.company_logos import ticker_logo
+from portfolio_app.parallel_data import parallel_loads
 from portfolio_app.company_calendar import exchange_today, fetch_calendars, upcoming_earnings
 from portfolio_app.market_sentiment import SOURCE_URL as SENTIMENT_SOURCE_URL, fetch_sentiment
 from portfolio_app.market_context import fetch_market_context
@@ -58,10 +60,12 @@ h1 {font-size:1.9rem !important; padding-bottom:.4rem !important;}
 .masthead-note {color:#d2dae3; font-size:.7rem; letter-spacing:.12em;
     border:1px solid #ffffff26; border-radius:20px; padding:7px 13px;}
 .quote-strip {display:flex; flex-wrap:wrap; border:1px solid #e4e8ed; border-radius:12px;
-    margin-bottom:14px; background:#fff; box-shadow:0 3px 12px #172b4405; overflow:hidden;}
+    margin-top:1.5rem; margin-bottom:14px; background:#fff; box-shadow:0 3px 12px #172b4405; overflow:hidden;}
 .quote {padding:16px 20px; border-right:1px solid #e9edf1; font-size:.82rem; flex:1; min-width:150px;}
 .quote:last-child {border-right:0;}
 .quote strong {color:#23659a; margin-right:10px;}
+.ticker-logo {width:28px;height:28px;object-fit:contain;vertical-align:middle;
+    margin-right:8px;border-radius:6px;background:#f5f7fa;font-size:0;}
 .quote-price {font-weight:600; margin-right:8px; font-variant-numeric:tabular-nums;}
 .up,.down,.neutral {display:inline-block; padding:3px 7px; border-radius:5px;
     font-weight:600; font-size:.76rem; font-variant-numeric:tabular-nums;}
@@ -443,17 +447,22 @@ def render_extended(part, quotes, name):
                      f'<div class="extended-time">{escape(portfolios)}</div>{"".join(rows)}</article>')
     st.html('<div class="extended-grid">' + "".join(cards) + '</div>')
     cash_session = next((quote["regular_session"] for quote in quotes.values() if quote.get("regular_session")), None)
-    st.markdown("##### Indexes")
-    render_benchmarks(cash_session)
-    st.markdown("##### Others")
-    with st.container(horizontal=True, horizontal_alignment="center"):
-        render_vix()
-        render_crude_oil()
-        render_market_context()
-    render_sector_map()
-    render_macro_calendar()
-    with st.container(horizontal_alignment="center"):
-        render_sentiment(name)
+    with parallel_loads({
+        "benchmarks": lambda: load_benchmarks(cash_session),
+        "vix": load_vix, "crude_oil": load_crude_oil,
+        "context": load_market_context, "sentiment": load_sentiment,
+    }) as pending:
+        st.markdown("##### Indexes")
+        render_benchmarks(cash_session, pending["benchmarks"].result)
+        st.markdown("##### Others")
+        with st.container(horizontal=True, horizontal_alignment="center"):
+            render_vix(pending["vix"].result)
+            render_crude_oil(pending["crude_oil"].result)
+            render_market_context(pending["context"].result)
+        render_sector_map()
+        render_macro_calendar()
+        with st.container(horizontal_alignment="center"):
+            render_sentiment(name, pending["sentiment"].result)
 
 
 def render_sector_map():
@@ -492,8 +501,8 @@ def render_macro_calendar():
         st.html('<div class="extended-grid">' + "".join(cards) + '</div>')
 
 
-def render_market_context():
-    data = load_market_context()
+def render_market_context(data_loader=load_market_context):
+    data = data_loader()
     us10y = data.get("us10y")
     with st.container(width=260):
         delta = None
@@ -528,9 +537,9 @@ def render_market_context():
         st.metric("Equity Put/Call", "—" if not put_call else f'{put_call["value"]:.2f}', help=help_text)
 
 
-def render_vix():
+def render_vix(data_loader=load_vix):
     with st.container(width=260):
-        vix, vix_error = load_vix()
+        vix, vix_error = data_loader()
         delta = None
         help_text = tr("Indeks zmienności Cboe VIX. Zmiana względem poprzedniego zamknięcia. Wzrost oznacza większą oczekiwaną zmienność.")
         if vix:
@@ -545,9 +554,9 @@ def render_vix():
                   delta=delta, delta_color="normal", help=help_text)
 
 
-def render_crude_oil():
+def render_crude_oil(data_loader=load_crude_oil):
     with st.container(width=260):
-        quote, error = load_crude_oil()
+        quote, error = data_loader()
         delta = None
         help_text = tr("Kontrakty na ropę WTI w USD za baryłkę. Zmiana względem poprzedniego zamknięcia. Dane mogą być opóźnione.")
         if quote:
@@ -568,8 +577,8 @@ def render_crude_oil():
             st.caption(tr(error))
 
 
-def render_sentiment(name):
-    data, error = load_sentiment()
+def render_sentiment(name, data_loader=load_sentiment):
+    data, error = data_loader()
     with st.container(border=True, width=440):
         st.markdown("**Fear & Greed Index · FearGreedFlow**")
         if data:
@@ -604,8 +613,8 @@ def render_sentiment(name):
         st.link_button(tr("Źródło: FearGreedFlow"), SENTIMENT_SOURCE_URL)
 
 
-def render_benchmarks(regular_session):
-    quotes, errors = load_benchmarks(regular_session)
+def render_benchmarks(regular_session, data_loader=None):
+    quotes, errors = data_loader() if data_loader else load_benchmarks(regular_session)
     now = datetime.now(timezone.utc)
     cards = []
     for name, index, future in BENCHMARKS:
@@ -964,7 +973,7 @@ def dashboard():
         change = (quote["price"] / previous - 1) * 100 if previous else None
         color = "neutral" if change is None else ("up" if change >= 0 else "down")
         change_text = "—" if change is None else f"{change:+.2f}%"
-        strip.append(f'<div class="quote"><strong>{symbol}</strong>'
+        strip.append(f'<div class="quote">{ticker_logo(symbol)}<strong>{escape(symbol)}</strong>'
                      f'<span class="quote-price">{quote["price"]:.2f}</span>'
                      f'<span class="{color}">{change_text}</span></div>')
     st.markdown(tr('<div class="quote-strip">' + "".join(strip) + '</div>'), unsafe_allow_html=True)

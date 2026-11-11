@@ -4,7 +4,7 @@
 
 **Your holdings, market context and upcoming events in one dashboard.**
 
-![Version](https://img.shields.io/badge/version-0.2-2563eb)
+![Version](https://img.shields.io/badge/version-0.3-2563eb)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/built_with-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![Languages](https://img.shields.io/badge/interface-EN%20%7C%20PL-15803d)
@@ -15,7 +15,7 @@
 
 ---
 
-Version **v0.2**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
+Version **v0.3**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
 with Polish and English interface options and English-only company news.
 Portfolio display names can be changed in the **Portfolio names** menu in the
 top toolbar. Names must be unique and contain 1-40 characters. Display names
@@ -136,6 +136,11 @@ return since purchase, separately per portfolio and for all holdings together.
 price in USD. New USD-listed stocks and ETFs are verified and names resolved
 automatically. Repeated purchases in one portfolio update shares and the weighted
 average price. The same ticker in the other portfolio remains independent.
+
+The quote strip below the MyPortfolio manager header loads logos automatically
+for every current and newly added symbol using the [Parqet Logo API](https://developers.parqet.com/docs/assets/logos).
+Logos appear only in this top strip. Images are loaded and cached by the browser;
+an unavailable logo leaves the ticker and quote readable.
 
 **Edit position** replaces total shares and average purchase price. Both must be
 positive finite numbers. Deletion removes the selected aggregate holding only.
@@ -273,6 +278,11 @@ Manual quote refresh clears quotes, FX, benchmarks, VIX, context, sector and
 macro caches. News has a separate refresh button and a ten-minute cache.
 Holdings calendars retain their browser-session snapshot.
 
+Independent benchmark, VIX, oil, market-context and sentiment reads run in
+parallel with up to four workers. Each retains its existing cache lifetime;
+cached page reruns do not trigger extra provider requests. Rendering remains
+on Streamlit's script thread.
+
 The sidebar **Info** checkbox is off by default. It controls final source,
 retrieval-time, delay and stale-quote notes for the current browser session.
 Relevant provider errors are still reported.
@@ -388,6 +398,9 @@ SSH disconnects; configure its working directory and runtime write permissions.
 
 ## 🏷️ Releases
 
+- **v0.3:** automatic company logos in the header quote strip, improved header
+  spacing, parallel market-data reads preserving cache lifetimes, and dashboard
+  regression checks for rendering, caching and manual refresh.
 - **v0.1:** initial baseline.
 - **v0.2:** market context, sector map and economic calendar; demo and Windows
   launchers; process-stable sessions and Windows connection cleanup; aggregated
