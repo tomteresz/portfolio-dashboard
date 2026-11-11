@@ -325,19 +325,30 @@ def daily_change(positions):
     return (positions["Wartość"].sum() / positions["Wartość poprzednia"].sum() - 1) * 100
 
 
-def daily_metric(target, positions):
+def performance_delta(amount, show_pln=False, rate=None):
+    if amount is None:
+        return None
+    text = f"{amount:+,.2f} USD"
+    if show_pln:
+        converted = amount * rate if rate is not None else None
+        text += "  \n" + ("— PLN" if converted is None or not math.isfinite(converted)
+                        else f"{converted:+,.2f} PLN")
+    return text
+
+
+def daily_metric(target, positions, show_pln=False, rate=None):
     change = daily_change(positions)
     amount = None if change is None else positions["Wartość"].sum() - positions["Wartość poprzednia"].sum()
     target.metric(tr("Zmiana dzienna"), "—" if change is None else f"{change:+.2f}%",
-                  delta=None if amount is None else f"{amount:+,.2f} USD",
+                  delta=performance_delta(amount, show_pln, rate),
                   help=tr("Względem zamknięcia sesji poprzedzającej datę ostatniego notowania. "
                        "Wynik portfela ważony wartością pozycji na poprzednim zamknięciu."))
 
 
-def return_metric(target, positions):
+def return_metric(target, positions, show_pln=False, rate=None):
     value, cost = positions["Wartość"].sum(), positions["Kapitał"].sum()
     target.metric(tr("Zwrot od zakupu"), f"{(value / cost - 1) * 100:+.2f}%",
-                  delta=f"{value - cost:+,.2f} USD",
+                  delta=performance_delta(value - cost, show_pln, rate),
                   help=tr("Zmiana wartości portfela względem zainwestowanego kapitału. "
                        "Bez dywidend, prowizji i wpływu kursów walut."))
 
@@ -361,9 +372,9 @@ def summary(positions, fx, overall=False):
                       delta=market_pln_text, delta_color="off", delta_arrow="off",
                       help=tr("Wartość w USD przeliczona po bieżącym kursie z pola USD/PLN.") if quote else tr(error))
         with st.container(width=260, key=f"change-{daily_color}-daily-{scope}"):
-            daily_metric(st, positions)
+            daily_metric(st, positions, show_pln=overall, rate=rate)
         with st.container(width=260, key=f"change-{return_color}-return-{scope}"):
-            return_metric(st, positions)
+            return_metric(st, positions, show_pln=overall, rate=rate)
         with st.container(width=260):
             st.metric(tr("Zainwestowany kapitał"), f"${cost:,.2f}", delta=converted_text,
                       delta_color="off", delta_arrow="off",

@@ -88,6 +88,36 @@ class DashboardTests(unittest.TestCase):
             app = self.render()
         self.assertFalse(any('class="quote-strip"' in m.value for m in app.markdown))
 
+    def test_overall_returns_use_displayed_fx_rate(self):
+        fx = {'price': 4.123456, 'timestamp': datetime.now(timezone.utc)}
+        with patch('portfolio_app.market_data.fetch_usd_pln', return_value=(fx, None)):
+            app = self.render('en')
+        daily = [metric for metric in app.metric if metric.label == 'Daily change']
+        returns = [metric for metric in app.metric if metric.label == 'Total return']
+        self.assertEqual(daily[0].delta, '+6.00 USD  \n+24.74 PLN')
+        self.assertEqual(returns[0].delta, '+120.00 USD  \n+494.82 PLN')
+        self.assertTrue(all('PLN' not in metric.delta for metric in daily[1:] + returns[1:]))
+
+    def test_missing_fx_preserves_usd_returns(self):
+        app = self.render('en')
+        daily = next(metric for metric in app.metric if metric.label == 'Daily change')
+        total = next(metric for metric in app.metric if metric.label == 'Total return')
+        self.assertEqual(daily.delta, '+6.00 USD  \n— PLN')
+        self.assertEqual(total.delta, '+120.00 USD  \n— PLN')
+
+    def test_negative_returns_keep_sign_in_both_currencies(self):
+        now = datetime.now(timezone.utc)
+        quotes = {s: dict(price=70, previous_close=75, timestamp=now, fetched_at=now)
+                  for s in ('MSFT', 'AAPL')}
+        fx = {'price': 4.0, 'timestamp': now}
+        with patch('portfolio_app.market_data.fetch_usd_pln', return_value=(fx, None)), \
+                patch('portfolio_app.market_data.fetch_quotes', return_value=(quotes, {})):
+            app = self.render('en')
+        daily = next(metric for metric in app.metric if metric.label == 'Daily change')
+        total = next(metric for metric in app.metric if metric.label == 'Total return')
+        self.assertEqual(daily.delta, '-30.00 USD  \n-120.00 PLN')
+        self.assertEqual(total.delta, '-60.00 USD  \n-240.00 PLN')
+
     def test_unavailable_quotes(self):
         with patch('portfolio_app.market_data.fetch_quotes', return_value=({}, {'MSFT': 'offline', 'AAPL': 'offline'})):
             app = self.render()
