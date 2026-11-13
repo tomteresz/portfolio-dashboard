@@ -5,9 +5,9 @@ import json
 import logging
 import math
 from urllib.parse import quote
-from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from curl_cffi import requests
 import pandas as pd
 
 EXCHANGE_TIMEZONE = ZoneInfo("America/New_York")
@@ -71,11 +71,16 @@ def normalize_dividends(payload, today=None):
 
 def _nasdaq_dividends(symbol):
     url = f"https://api.nasdaq.com/api/quote/{quote(symbol, safe='')}/dividends?assetclass=stocks"
-    request = Request(url, headers={"User-Agent": "MojePortfolio/1.0", "Accept": "application/json"})
-    with urlopen(request, timeout=8) as response:
-        body = response.read(2_000_001)
-    if len(body) > 2_000_000:
-        raise ValueError("Dividend response too large")
+    # Nasdaq rejects urllib's TLS fingerprint with HTTP 403. Use the same
+    # browser-compatible transport as yfinance, retaining a bounded response.
+    body = bytearray()
+    with requests.Session(impersonate="chrome") as session:
+        with session.stream("GET", url, headers={"Accept": "application/json"}, timeout=8) as response:
+            response.raise_for_status()
+            for chunk in response.iter_content():
+                body.extend(chunk)
+                if len(body) > 2_000_000:
+                    raise ValueError("Dividend response too large")
     return normalize_dividends(json.loads(body))
 
 
