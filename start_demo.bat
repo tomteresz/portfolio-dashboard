@@ -18,13 +18,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set "PORTFOLIO_DEMO=1"
 set "PORTFOLIO_PATH=%CD%\.streamlit\demo\portfolio.json"
 set "LAYOUT_PATH=%CD%\.streamlit\demo\layout.json"
 set "SESSION_DB_PATH=%CD%\.streamlit\demo\sessions.sqlite3"
 set "LOG_DIR=%CD%\.streamlit\demo\logs"
 
 echo DEMO - fictional holdings, live provider data.
-echo Each launch restores the sample holdings. Use your regular sign-in credentials.
+echo Each launch restores the sample holdings. Sign in as admin - no password required.
 streamlit run app.py
 if errorlevel 1 pause
 endlocal

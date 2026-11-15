@@ -99,6 +99,7 @@ EN = {
     "Zaloguj się, aby przeglądać i modyfikować portfele.": "Sign in to view and edit your portfolios.",
     "Hasło": "Password", "Zaloguj się": "Sign in", "Wyloguj się": "Sign out", "Wyloguj": "Sign out",
     "Nieprawidłowy login lub hasło.": "Incorrect username or password.",
+    "Nieprawidłowy login.": "Incorrect username.",
     "Zbyt wiele prób. Odczekaj minutę.": "Too many attempts. Please wait a minute.",
     "Nie można odczytać konfiguracji logowania.": "Unable to read sign-in configuration.",
     "Ustawienia portfela": "Portfolio settings", "Dane rynkowe": "Market data",

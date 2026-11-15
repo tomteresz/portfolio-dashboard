@@ -85,7 +85,7 @@ dependency changes; F5 alone does not replace a server restart.
 ## 🎬 Demo mode
 
 1. Stop the normal application with Ctrl+C.
-2. Run **start_demo.bat** and sign in using your existing credentials.
+2. Run **start_demo.bat** and sign in as **admin**, with no password.
 3. Stop the demo and run **start.bat** to return to your own holdings.
 
 The demo has six fictional holdings across both portfolios, including fractional
@@ -93,14 +93,16 @@ shares and a shared ticker. Quotes, news and calendars still use real providers.
 Each launch copies `examples/demo_portfolio.json` to
 `.streamlit/demo/portfolio.json`, replacing previous demo holdings. Demo layout,
 sessions and logs also use `.streamlit/demo/`. Regular holdings in `data/` are
-not modified. Authentication still reads your regular `data/auth.json`.
+not modified. The launcher sets `PORTFOLIO_DEMO=1`: the sign-in form shows only
+the **admin** username, and demo authentication does not require `data/auth.json`.
 Sign in before presenting and exclude private data when distributing a copy.
 
 <a id="sign-in"></a>
 
 ## 🔐 Sign-in and language
 
-- Username: **admin**. Passwords are not stored as plain text in code or this
+- Username: **admin**. Demo mode requires no password. In normal mode,
+  passwords are not stored as plain text in code or this
   README. `data/auth.json` contains a random salt and a scrypt password hash.
 - Sessions last up to **eight hours within one server process**. F5 and module
   reloads preserve sign-in. Restarting or forcibly terminating the server

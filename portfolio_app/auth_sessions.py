@@ -32,9 +32,16 @@ def _connection():
     return connection
 
 
+def is_demo_mode():
+    return os.environ.get("PORTFOLIO_DEMO") == "1"
+
+
 def _fingerprint():
-    config = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
-    identity = json.dumps([config["username"], config["password_hash"], _SERVER_RUN_ID])
+    if is_demo_mode():
+        identity = json.dumps(["demo", "admin", _SERVER_RUN_ID])
+    else:
+        config = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
+        identity = json.dumps([config["username"], config["password_hash"], _SERVER_RUN_ID])
     return hashlib.sha256(identity.encode()).hexdigest()
 
 
