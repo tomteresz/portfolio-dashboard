@@ -4,7 +4,7 @@
 
 **Your holdings, market context and upcoming events in one dashboard.**
 
-![Version](https://img.shields.io/badge/version-0.3-2563eb)
+![Version](https://img.shields.io/badge/version-0.7-2563eb)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/built_with-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![Languages](https://img.shields.io/badge/interface-EN%20%7C%20PL-15803d)
@@ -15,7 +15,7 @@
 
 ---
 
-Version **v0.3**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
+Version **v0.7**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
 with Polish and English interface options and English-only company news.
 Portfolio display names can be changed in the **Portfolio names** menu in the
 top toolbar. Names must be unique and contain 1-40 characters. Display names
@@ -130,7 +130,8 @@ return since purchase, separately per portfolio and for all holdings together.
   dividends, commissions and currency movements.
 - USD/PLN shows the rate and daily change. Total value, portfolio market values
   and invested capital also have neutral PLN equivalents using the same rate
-  rounded to four decimals. Missing FX data produces a dash.
+  rounded to four decimals. Daily change and return since purchase show
+  percentages and USD amounts. Missing FX data produces a dash.
 - Positive changes are green; negative changes are red, including VIX.
   Color indicates direction, not whether a move is favorable.
 
@@ -180,9 +181,9 @@ portfolios, lists the associated portfolios and uses combined current shares
 for estimated gross dividend totals. Cards are sorted by the next known event.
 
 Earnings dates come from Yahoo and may be estimated dates or ranges. Declared
-dividends, ex-dividend dates and payment dates come from Nasdaq, with a date-only
-Yahoo fallback where available. Annual rates and historical payments are never
-substituted for a future dividend amount.
+dividends, ex-dividend dates and payment dates come from Nasdaq through
+`curl-cffi`, with a date-only Yahoo fallback where available. Annual rates and
+historical payments are never substituted for a future dividend amount.
 
 Dividend fields appear only when an upcoming payout or positive Yahoo-reported
 dividend rate confirms dividend activity. Other or unconfirmed statuses hide
@@ -313,7 +314,6 @@ snapshot with a warning; partial portfolio totals are not invented.
 | `logs/` | Rotating access and error logs |
 | `.env/` | Local Python environment |
 | `.gitignore` | Private data and generated-file exclusions when using Git |
-| `.agents/skills/developing-with-streamlit/` | Project-local Streamlit skill and discovery helper |
 
 `PORTFOLIO_PATH`, `LAYOUT_PATH`, `SESSION_DB_PATH` and `LOG_DIR` override runtime
 storage locations. The default layout file is beside the holdings file.
@@ -340,12 +340,13 @@ and query strings are not logged. WebSocket duration covers the whole connection
 
 ## 🧩 Dependencies and validation
 
-The four direct dependencies are Streamlit, pandas, yfinance and langdetect.
+The five direct dependencies are Streamlit, pandas, yfinance, curl-cffi and langdetect.
 Pip installs their transitive dependencies. Separate Plotly, Docker and browser
 drivers are not required.
 
 ```powershell
 .\.env\Scripts\python.exe -m pip check
+.\.env\Scripts\python.exe -m unittest discover -s tests
 ```
 
 Automated checks have covered holdings lifecycle, weighted averages, aggregated
@@ -400,11 +401,18 @@ SSH disconnects; configure its working directory and runtime write permissions.
 
 ## 🏷️ Releases
 
+- **v0.7** updates the documentation to reflect the current dashboard, demo
+  sign-in, dependencies and validation commands.
+- **v0.6** lets users sign in to the demo as `admin` without a password or
+  an authentication file.
+- **v0.5** fixes Nasdaq dividend fetching using `curl-cffi`.
+- **v0.4** added separate PLN lines for overall daily change and return since
+  purchase.
 - **v0.3:** automatic company logos in the header quote strip, improved header
   spacing, parallel market-data reads preserving cache lifetimes, and dashboard
   regression checks for rendering, caching and manual refresh.
-- **v0.1:** initial baseline.
 - **v0.2:** market context, sector map and economic calendar; demo and Windows
   launchers; process-stable sessions and Windows connection cleanup; aggregated
   ticker calendars and dividend visibility; mobile layout improvements; Info
   controls; English documentation, source comments and launcher messages.
+- **v0.1:** initial baseline.
