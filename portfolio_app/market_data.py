@@ -1,7 +1,7 @@
 """Latest available minute prices from Yahoo Finance (not a tick feed)."""
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import math
 import logging
@@ -324,6 +324,28 @@ def fetch_vix():
     except Exception as exc:
         logging.getLogger("portfolio.error").warning("VIX fetch failed: %s", type(exc).__name__)
         return None, "Indeks VIX jest chwilowo niedostępny."
+
+
+def fetch_daily_history(symbol, *, positive=True):
+    """Daily Yahoo levels for 14 calendar days in the US market time zone."""
+    import yfinance as yf
+
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    start = today - timedelta(days=13)
+    end = today + timedelta(days=1)
+    try:
+        history = yf.Ticker(symbol).history(start=start.isoformat(), end=end.isoformat(),
+                                            interval="1d", auto_adjust=False, timeout=10)
+        points = []
+        for stamp, value in history["Close"].sort_index().items():
+            day = stamp.date()
+            level = _number(value, positive=positive)
+            if start <= day <= today and level is not None:
+                points.append({"day": day.isoformat(), "level": level})
+        return points
+    except Exception as exc:
+        logging.getLogger("portfolio.error").warning("Daily history fetch failed for %s: %s", symbol, type(exc).__name__)
+        return []
 
 
 def fetch_usd_pln():

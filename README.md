@@ -15,7 +15,7 @@
 
 ---
 
-Version **v0.7**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
+Version **v0.8**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
 with Polish and English interface options and English-only company news.
 Portfolio display names can be changed in the **Portfolio names** menu in the
 top toolbar. Names must be unique and contain 1-40 characters. Display names
@@ -251,6 +251,17 @@ Dates and retrieval times are available in tooltips where appropriate. Finviz
 does not provide an observation timestamp. Indicators do not affect portfolio
 valuation. Missing values are dashes.
 
+The breadth chart shows advancing and declining counts as two lines over the
+last 14 calendar days. When the dashboard refreshes during the last 30 minutes
+of a known US regular session, it saves the latest Finviz reading for that day
+in `market_breadth.sqlite3` beside the portfolio file. History starts with the
+first saved reading.
+
+The 14-day line charts use daily Yahoo Finance data for VIX (`^VIX`), US 10Y
+(`^TNX`), WTI futures (`CL=F`), and the Nasdaq 100 and S&P 500 cash indexes
+(`^NDX` and `^GSPC`). The Investing.com tiles continue to show their live
+Cash and Futures quotes.
+
 The sector map uses equal-sized tiles, not capitalization weights. It covers
 technology, financials, energy, health care, industrials, materials, consumer
 discretionary, consumer staples, utilities, real estate and communication
@@ -401,6 +412,8 @@ SSH disconnects; configure its working directory and runtime write permissions.
 
 ## 🏷️ Releases
 
+- **v0.8** adds 14-day charts for VIX, US 10Y, WTI, Nasdaq 100 and S&P 500,
+  plus a two-line market breadth chart backed by locally saved Finviz readings.
 - **v0.7** updates the documentation to reflect the current dashboard, demo
   sign-in, dependencies and validation commands.
 - **v0.6** lets users sign in to the demo as `admin` without a password or

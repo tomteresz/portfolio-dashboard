@@ -29,6 +29,31 @@ def bars(price=None, timestamp=NOW - timedelta(minutes=1)):
     return pd.DataFrame({"Close": [] if price is None else [price]}, index=index)
 
 
+class DailyHistoryTests(unittest.TestCase):
+    def test_history_uses_fourteen_calendar_days_and_valid_daily_levels(self):
+        history = pd.DataFrame({"Close": [19.25, 22.0, 0.0, 17.5, float("nan"), 18.0]},
+                               index=pd.to_datetime(["2026-11-09", "2026-10-26", "2026-11-05",
+                                                     "2026-10-27", "2026-11-06", "2026-11-10"]))
+        with patch("yfinance.Ticker") as ticker, patch.object(market, "datetime", wraps=datetime) as clock:
+            clock.now.side_effect = NOW.astimezone
+            ticker.return_value.history.return_value = history
+            self.assertEqual(market.fetch_daily_history("^VIX"), [
+                {"day": "2026-10-27", "level": 17.5}, {"day": "2026-11-09", "level": 19.25},
+            ])
+        ticker.assert_called_once_with("^VIX")
+        ticker.return_value.history.assert_called_once_with(
+            start="2026-10-27", end="2026-11-10", interval="1d", auto_adjust=False, timeout=10)
+
+    def test_wti_daily_history_accepts_negative_prices(self):
+        history = pd.DataFrame({"Close": [-37.63]}, index=pd.to_datetime(["2026-11-09"]))
+        with patch("yfinance.Ticker") as ticker, patch.object(market, "datetime", wraps=datetime) as clock:
+            clock.now.side_effect = NOW.astimezone
+            ticker.return_value.history.return_value = history
+            self.assertEqual(market.fetch_daily_history("CL=F", positive=False), [
+                {"day": "2026-11-09", "level": -37.63},
+            ])
+
+
 class PreMarketTests(unittest.TestCase):
     def test_cold_fetch_accepts_quotes_arriving_during_network_requests(self):
         for symbol in ("INTC", "MSFT", "AMZN", "GOOGL"):

@@ -1,13 +1,17 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from html import escape
 from hashlib import sha256
 import math
+import sqlite3
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
 
-from portfolio_app.market_data import fetch_quotes, fetch_usd_pln, fetch_vix, lookup_company, quote_regular_active, extended_value, extended_session
+from portfolio_app.market_data import (
+    fetch_quotes, fetch_usd_pln, fetch_vix, fetch_daily_history, lookup_company,
+    quote_regular_active, extended_value, extended_session,
+)
 from portfolio_app.investing_data import BENCHMARKS, fetch_benchmarks
 from portfolio_app.crude_oil import fetch_crude_oil
 from portfolio_app.holdings_table import column_metadata, render_table
@@ -16,7 +20,8 @@ from portfolio_app.company_logos import ticker_logo
 from portfolio_app.parallel_data import parallel_loads
 from portfolio_app.company_calendar import exchange_today, fetch_calendars, upcoming_earnings
 from portfolio_app.market_sentiment import SOURCE_URL as SENTIMENT_SOURCE_URL, fetch_sentiment
-from portfolio_app.market_context import fetch_market_context
+from portfolio_app.market_context import EXCHANGE_ZONE, fetch_market_context
+from portfolio_app.breadth_history import BREADTH_HISTORY_DAYS, load_breadth_history
 from portfolio_app.market_overview import SECTORS, fetch_sectors, fetch_macro_calendar, upcoming_macro
 from portfolio_app.auth import require_login, logout_button, is_authenticated
 from portfolio_app.i18n import tr, language, language_selector
@@ -119,6 +124,7 @@ h1 {font-size:1.9rem !important; padding-bottom:.4rem !important;}
 
 COLORS = {"INTC": "#8062d6", "MSFT": "#3e98b5", "AMZN": "#e6ae58", "GOOGL": "#64b79c"}
 DISPLAY_TIMEZONE = ZoneInfo("Europe/Warsaw")
+BENCHMARK_CHARTS = {"1175151": ("Nasdaq 100", "^NDX"), "1175153": ("S&P 500", "^GSPC")}
 
 
 def portfolio_label(portfolio):
@@ -147,6 +153,11 @@ def load_news(symbols):
 @st.cache_data(ttl=55, max_entries=1, show_spinner=False)
 def load_vix():
     return fetch_vix()
+
+
+@st.cache_data(ttl=300, max_entries=5, show_spinner=False)
+def load_daily_history(symbol):
+    return fetch_daily_history(symbol, positive=symbol not in ("CL=F", "^TNX"))
 
 
 @st.cache_data(ttl=55, max_entries=1, show_spinner=False)
@@ -447,18 +458,23 @@ def render_extended(part, quotes, name):
                      f'<div class="extended-time">{escape(portfolios)}</div>{"".join(rows)}</article>')
     st.html('<div class="extended-grid">' + "".join(cards) + '</div>')
     cash_session = next((quote["regular_session"] for quote in quotes.values() if quote.get("regular_session")), None)
+    benchmark_tickers = tuple(ticker for _, ticker in BENCHMARK_CHARTS.values())
     with parallel_loads({
         "benchmarks": lambda: load_benchmarks(cash_session),
+        **{symbol: lambda symbol=symbol: load_daily_history(symbol) for symbol in benchmark_tickers},
         "vix": load_vix, "crude_oil": load_crude_oil,
         "context": load_market_context, "sentiment": load_sentiment,
+        **{symbol: lambda symbol=symbol: load_daily_history(symbol)
+           for symbol in ("^VIX", "CL=F", "^TNX")},
     }) as pending:
         st.markdown("##### Indexes")
-        render_benchmarks(cash_session, pending["benchmarks"].result)
+        render_benchmarks(cash_session, pending["benchmarks"].result,
+                          {ticker: pending[ticker].result for ticker in benchmark_tickers})
         st.markdown("##### Others")
         with st.container(horizontal=True, horizontal_alignment="center"):
-            render_vix(pending["vix"].result)
-            render_crude_oil(pending["crude_oil"].result)
-            render_market_context(pending["context"].result)
+            render_vix(pending["vix"].result, pending["^VIX"].result())
+            render_crude_oil(pending["crude_oil"].result, pending["CL=F"].result())
+            render_market_context(pending["context"].result, cash_session, pending["^TNX"].result())
         render_sector_map()
         render_macro_calendar()
         with st.container(horizontal_alignment="center"):
@@ -501,7 +517,7 @@ def render_macro_calendar():
         st.html('<div class="extended-grid">' + "".join(cards) + '</div>')
 
 
-def render_market_context(data_loader=load_market_context):
+def render_market_context(data_loader=load_market_context, cash_session=None, us10y_history=()):
     data = data_loader()
     us10y = data.get("us10y")
     with st.container(width=260):
@@ -515,6 +531,7 @@ def render_market_context(data_loader=load_market_context):
             help_text = tr("Dane chwilowo niedostępne.")
         st.metric("US 10Y", "—" if not us10y else f'{us10y["value"]:.3f}%',
                   delta=delta, delta_color="normal", help=help_text)
+        render_daily_history(us10y_history, "US 10Y", "US 10Y (%)", "us10y-history", precision=3)
     breadth = data.get("breadth")
     with st.container(width=260):
         help_text = tr("Rosnące / spadające walory na NYSE, Nasdaq i AMEX. Zmiana poniżej to bilans: rosnące minus spadające, nie zmiana względem wczoraj. Finviz nie podaje czasu samego odczytu; dane mogą być opóźnione.")
@@ -527,6 +544,7 @@ def render_market_context(data_loader=load_market_context):
             help_text = tr("Dane chwilowo niedostępne.")
         st.metric(tr("Rynek · rosnące / spadające"), value, delta=delta,
                   delta_color="normal", help=help_text)
+        render_breadth_history(breadth, cash_session)
     put_call = data.get("put_call")
     with st.container(width=260):
         help_text = tr("Dzienny stosunek wolumenu opcji put do call na akcje. Equity Put/Call Ratio, bez opcji indeksowych i ETF. Wartość bez zmiany dziennej.")
@@ -537,7 +555,51 @@ def render_market_context(data_loader=load_market_context):
         st.metric("Equity Put/Call", "—" if not put_call else f'{put_call["value"]:.2f}', help=help_text)
 
 
-def render_vix(data_loader=load_vix):
+def render_breadth_history(breadth, cash_session):
+    now = datetime.now(EXCHANGE_ZONE)
+    try:
+        history = load_breadth_history(breadth, cash_session, now=now)
+    except (OSError, sqlite3.Error):
+        configure_logs()[1].exception("Could not store or load market breadth history")
+        st.caption(tr("Historia szerokości rynku jest chwilowo niedostępna."))
+        return
+    if not history:
+        st.caption(tr("Historia pojawi się po pierwszym odczycie zapisanym w ostatnich 30 minutach sesji USA."))
+        return
+
+    label = tr("Rosnące / spadające · ostatnie 14 dni")
+    st.caption(label)
+    today = now.date()
+    # Leave space for the points at the ends of the plot.
+    bounds = (today - timedelta(days=BREADTH_HISTORY_DAYS), today)
+    domain = [{"year": day.year, "month": day.month, "date": day.day, "hours": 12, "utc": True}
+              for day in bounds]
+    advancing_label, declining_label = tr("Rosnące walory"), tr("Spadające walory")
+    history = pd.DataFrame(history).rename(columns={"advancing": advancing_label, "declining": declining_label})
+    spec = {
+        "height": 105,
+        "transform": [{"fold": [advancing_label, declining_label], "as": ["series", "count"]}],
+        "mark": {"type": "line", "point": True},
+        "encoding": {
+            "x": {"field": "day", "type": "temporal", "title": None, "scale": {"type": "utc", "domain": domain},
+                  "axis": {"format": "%d.%m", "tickCount": {"interval": "day", "step": 3}, "labelAngle": 0}},
+            "y": {"field": "count", "type": "quantitative", "title": None,
+                  "scale": {"zero": False}, "axis": {"tickCount": 4, "format": ",d"}},
+            "color": {"field": "series", "type": "nominal", "title": None,
+                      "scale": {"domain": [advancing_label, declining_label],
+                                "range": ["#168047", "#c33935"]},
+                      "legend": {"orient": "bottom", "columns": 1}},
+            "tooltip": [{"field": "day", "type": "temporal", "title": tr("Data sesji"),
+                         "formatType": "utc", "format": "%d.%m.%Y"},
+                        {"field": "net", "type": "quantitative", "title": tr("Bilans rynku"), "format": "+,d"},
+                        {"field": advancing_label, "type": "quantitative", "format": ",d"},
+                        {"field": declining_label, "type": "quantitative", "format": ",d"}],
+        },
+    }
+    st.vega_lite_chart(history, spec, width="stretch", key="breadth-history", alt=label)
+
+
+def render_vix(data_loader=load_vix, history=()):
     with st.container(width=260):
         vix, vix_error = data_loader()
         delta = None
@@ -552,9 +614,33 @@ def render_vix(data_loader=load_vix):
             help_text = tr(vix_error)
         st.metric(tr("VIX · indeks strachu"), "—" if not vix else f'{vix["price"]:.2f}',
                   delta=delta, delta_color="normal", help=help_text)
+        render_daily_history(history, "VIX", f'VIX ({tr("pkt")})', "vix-history")
 
 
-def render_crude_oil(data_loader=load_crude_oil):
+def render_daily_history(history, name, value_label, key, *, precision=2, source=None):
+    if not history:
+        st.caption(tr("Brak danych z ostatnich 14 dni."))
+        return
+
+    label = name + " · " + tr("ostatnie 14 dni")
+    st.caption(label, help=source)
+    spec = {
+        "height": 105,
+        "mark": {"type": "line", "point": True},
+        "encoding": {
+            "x": {"field": "day", "type": "temporal", "title": None, "scale": {"type": "utc"},
+                  "axis": {"format": "%d.%m", "tickCount": "day", "labelAngle": 0}},
+            "y": {"field": "level", "type": "quantitative", "title": None,
+                  "scale": {"zero": False}, "axis": {"tickCount": 4}},
+            "tooltip": [{"field": "day", "type": "temporal", "title": tr("Data sesji"),
+                         "formatType": "utc", "format": "%d.%m.%Y"},
+                        {"field": "level", "type": "quantitative", "title": value_label, "format": f",.{precision}f"}],
+        },
+    }
+    st.vega_lite_chart(pd.DataFrame(history), spec, width="stretch", key=key, alt=label)
+
+
+def render_crude_oil(data_loader=load_crude_oil, history=()):
     with st.container(width=260):
         quote, error = data_loader()
         delta = None
@@ -575,6 +661,7 @@ def render_crude_oil(data_loader=load_crude_oil):
                   delta=delta, help=help_text)
         if not quote:
             st.caption(tr(error))
+        render_daily_history(history, "WTI", tr("WTI (USD za baryłkę)"), "wti-history")
 
 
 def render_sentiment(name, data_loader=load_sentiment):
@@ -613,11 +700,10 @@ def render_sentiment(name, data_loader=load_sentiment):
         st.link_button(tr("Źródło: FearGreedFlow"), SENTIMENT_SOURCE_URL)
 
 
-def render_benchmarks(regular_session, data_loader=None):
+def render_benchmarks(regular_session, data_loader=None, history_loaders=None):
     quotes, errors = data_loader() if data_loader else load_benchmarks(regular_session)
     now = datetime.now(timezone.utc)
-    cards = []
-    for name, index, future in BENCHMARKS:
+    for (name, index, future), column in zip(BENCHMARKS, st.columns(len(BENCHMARKS)), strict=True):
         rows = []
         show_future = index in quotes and quote_regular_active(quotes[index], now) is False
         for label, symbol, visible in (("Cash", index, True), ("Futures", future, show_future)):
@@ -637,8 +723,12 @@ def render_benchmarks(regular_session, data_loader=None):
                          else tr("Brak dostępnych notowań"))
             rows.append(f'<div class="extended-row"><span>{label}</span><div>{value}</div></div>'
                         f'<div class="extended-time">{stamp}</div>')
-        cards.append(f'<article class="holding-card"><strong>{escape(name)}</strong>{"".join(rows)}</article>')
-    st.html('<div class="extended-grid">' + "".join(cards) + '</div>')
+        with column:
+            st.html(f'<article class="holding-card"><strong>{escape(name)}</strong>{"".join(rows)}</article>')
+            if history_loaders is not None:
+                chart_name, ticker = BENCHMARK_CHARTS[index]
+                render_daily_history(history_loaders[ticker](), chart_name, f'{chart_name} ({tr("pkt")})',
+                                     f"benchmark-history-{index}", source=f"Yahoo Finance ({ticker})")
     if errors:
         unavailable = [name + " " + label for name, cash, future in BENCHMARKS
                        for label, symbol in (("Cash", cash), ("Futures", future)) if symbol in errors]
@@ -920,6 +1010,7 @@ def dashboard():
             load_quotes.clear()
             load_usd_pln.clear()
             load_vix.clear()
+            load_daily_history.clear()
             load_crude_oil.clear()
             load_market_context.clear()
             load_sectors.clear()
