@@ -1,4 +1,4 @@
-"""Persist one near-close Finviz market breadth snapshot per US session."""
+"""Persist one post-close Finviz market breadth snapshot per US session."""
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -9,16 +9,17 @@ from portfolio_app.market_data import _instant
 from portfolio_app.portfolio_store import PORTFOLIO_PATH
 
 BREADTH_HISTORY_DAYS = 14
-_CLOSE_WINDOW = timedelta(minutes=30)
+_AFTER_CLOSE = timedelta(minutes=15)
 
 
-def _near_close(fetched_at, regular_session):
+def _after_close(fetched_at, regular_session):
     try:
         start = _instant(regular_session["start"])
         end = _instant(regular_session["end"])
     except (KeyError, TypeError, AttributeError, ValueError, OverflowError, OSError):
         return False
-    return max(start, end - _CLOSE_WINDOW) <= fetched_at < end
+    return (start < end and fetched_at >= end + _AFTER_CLOSE
+            and fetched_at.astimezone(EXCHANGE_ZONE).date() == end.astimezone(EXCHANGE_ZONE).date())
 
 
 def load_breadth_history(breadth, regular_session, *, now=None, path=None):
@@ -31,7 +32,7 @@ def load_breadth_history(breadth, regular_session, *, now=None, path=None):
     fetched_at = breadth["fetched_at"] if breadth else None
     save = (fetched_at is not None and fetched_at <= now
             and fetched_at.astimezone(EXCHANGE_ZONE).date() == today
-            and _near_close(fetched_at, regular_session))
+            and _after_close(fetched_at, regular_session))
     if not save and not path.exists():
         return []
 

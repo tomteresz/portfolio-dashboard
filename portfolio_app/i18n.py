@@ -35,7 +35,7 @@ EN = {
     "Bilans rynku": "Net advances",
     "Rosnące walory": "Advancing issues",
     "Spadające walory": "Declining issues",
-    "Historia pojawi się po pierwszym odczycie zapisanym w ostatnich 30 minutach sesji USA.": "History will appear after the first reading saved during the final 30 minutes of a US session.",
+    "Historia pojawi się po pierwszym odczycie pobranym co najmniej 15 minut po zamknięciu sesji USA.": "History will appear after the first reading fetched at least 15 minutes after the US session closes.",
     "Historia szerokości rynku jest chwilowo niedostępna.": "Market breadth history is temporarily unavailable.",
     "Dzienny stosunek wolumenu opcji put do call na akcje. Equity Put/Call Ratio, bez opcji indeksowych i ETF. Wartość bez zmiany dziennej.": "Daily equity option put/call volume ratio, excluding index and ETF options. Level only, without a daily change.",
     "VIX · indeks strachu": "VIX · fear index",

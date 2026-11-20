@@ -4,7 +4,7 @@
 
 **Your holdings, market context and upcoming events in one dashboard.**
 
-![Version](https://img.shields.io/badge/version-0.7-2563eb)
+![Version](https://img.shields.io/badge/version-0.10-2563eb)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/built_with-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![Languages](https://img.shields.io/badge/interface-EN%20%7C%20PL-15803d)
@@ -15,7 +15,7 @@
 
 ---
 
-Version **v0.9**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
+Version **v0.10**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
 with Polish and English interface options and English-only company news.
 Portfolio display names can be changed in the **Portfolio names** menu in the
 top toolbar. Names must be unique and contain 1-40 characters. Display names
@@ -261,15 +261,17 @@ does not provide an observation timestamp. Indicators do not affect portfolio
 valuation. Missing values are dashes.
 
 The breadth chart shows advancing and declining counts as two lines over the
-last 14 calendar days. When the dashboard refreshes during the last 30 minutes
-of a known US regular session, it saves the latest Finviz reading for that day
+last 14 calendar days. When the dashboard refreshes, it saves the latest Finviz
+reading fetched at least 15 minutes after that day's regular US session closes
 in `market_breadth.sqlite3` beside the portfolio file. History starts with the
 first saved reading.
 
 The 14-day line charts use daily Yahoo Finance data for VIX (`^VIX`), US 10Y
 (`^TNX`), WTI futures (`CL=F`), and the Nasdaq 100 and S&P 500 cash indexes
 (`^NDX` and `^GSPC`). The Investing.com tiles continue to show their live
-Cash and Futures quotes.
+Cash and Futures quotes. The chart tooltips show the trading date for each
+point. The calendar-day axis leaves space for weekends and other days without
+observations.
 
 The sector map uses equal-sized tiles, not capitalization weights. It covers
 technology, financials, energy, health care, industrials, materials, consumer
@@ -293,8 +295,9 @@ days old, and not future-dated. Gauge bands are extreme fear below 25, fear belo
 
 The common company-news feed covers both portfolios and shows up to **10
 deduplicated English articles from the last seven days**, with source, time and
-links. Articles are sorted by publication date, not an importance score.
-Some publishers require subscriptions.
+links. Cards show a publisher thumbnail when available and a ticker logo as the
+fallback. Articles are sorted by publication date. Some publishers require
+subscriptions.
 
 Quotes refresh every **60 seconds** while the sidebar option is enabled.
 Manual quote refresh clears quotes, FX, benchmarks, VIX, context, sector and
@@ -302,9 +305,10 @@ macro caches. News has a separate refresh button and a ten-minute cache.
 Holdings calendars retain their browser-session snapshot.
 
 Independent benchmark, VIX, oil, market-context and sentiment reads run in
-parallel with up to four workers. Each retains its existing cache lifetime;
-cached page reruns do not trigger extra provider requests. Rendering remains
-on Streamlit's script thread.
+parallel with up to four workers. The live USD/PLN quote and its daily history
+also load in parallel. The chart and portfolio summaries share that history
+within a refresh. Each data source retains its cache lifetime, and rendering
+stays on Streamlit's script thread.
 
 The sidebar **Info** checkbox is off by default. It controls final source,
 retrieval-time, delay and stale-quote notes for the current browser session.
@@ -369,9 +373,10 @@ routes and request logging.
 .\.env\Scripts\python.exe -m unittest discover -s tests
 ```
 
-Automated checks cover PL/EN rendering, cache behavior, chart refresh, daily
-contributor rankings, the historical USD/PLN fallback, market-data parsers and
-authentication. Live data availability depends on the providers.
+Automated checks cover PL/EN rendering, cache behavior, chart refresh and date
+tooltips, daily contributor rankings, the historical USD/PLN fallback, news
+thumbnail selection, market-data parsers and authentication. Live data
+availability depends on the providers.
 
 <a id="deployment"></a>
 
@@ -420,6 +425,9 @@ SSH disconnects; configure its working directory and runtime write permissions.
 
 ## 🏷️ Releases
 
+- **v0.10** adds company-news cards with thumbnails and ticker-logo fallbacks,
+  fixes trading dates in chart tooltips, and loads the USD/PLN quote and history
+  in parallel.
 - **v0.9** adds daily portfolio contributors in USD and PLN, a separate currency
   impact with a historical FX fallback, and a 14-day USD/PLN chart.
 - **v0.8** adds 14-day charts for VIX, US 10Y, WTI, Nasdaq 100 and S&P 500,

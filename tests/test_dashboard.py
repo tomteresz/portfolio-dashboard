@@ -79,6 +79,24 @@ class DashboardTests(unittest.TestCase):
             self.assertFalse(app.exception, [e.message for e in app.exception])
             self.assertEqual(fetch.call_count, 1)
 
+    def test_news_cards_show_thumbnails_and_fallback_logo(self):
+        now = datetime.now(timezone.utc)
+        photo_article = dict(title='Results & outlook', url='https://example.com/story?x=1&y=2',
+                             published=now, source='Publisher', symbols=['MSFT'],
+                             thumbnail='https://s.yimg.com/preview.jpg')
+        fallback_article = dict(title='A second report', url='https://example.com/report', published=now,
+                                source='Another publisher', symbols=['AAPL'])
+        news = {'MSFT': ([photo_article], None, now), 'AAPL': ([fallback_article], None, now)}
+        with patch('portfolio_app.company_news.fetch_news_batch', return_value=news):
+            app = self.render('en')
+        cards = next(item.proto.body for item in app.get('html') if 'class="news-grid"' in item.proto.body)
+        self.assertEqual(cards.count('class="news-card"'), 2)
+        self.assertEqual(cards.count('class="news-photo"'), 1)
+        self.assertIn('background-image:url(&quot;https://s.yimg.com/preview.jpg&quot;)', cards)
+        self.assertIn('/logos/symbol/AAPL?', cards)
+        self.assertIn('Results &amp; outlook', cards)
+        self.assertIn('href="https://example.com/story?x=1&amp;y=2"', cards)
+
     def test_daily_drivers_rank_aggregated_tickers_and_reconcile_pln(self):
         stamp = (datetime.now(timezone.utc) - timedelta(days=2)).replace(hour=20, minute=0)
         moves = {'MSFT': 5, 'AAPL': -4, 'CAT': 30, 'BA': 25, 'V': 8,
@@ -149,6 +167,9 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual([item.type for item in elements],
                              ['metric', 'caption', 'vega_lite_chart'])
             self.assertEqual(elements[0].label, 'VIX · fear index')
+            date_tooltip = json.loads(elements[-1].proto.spec)['encoding']['tooltip'][0]
+            self.assertEqual(date_tooltip, {'field': 'day', 'type': 'temporal', 'title': 'Trading date',
+                                            'timeUnit': 'utcyearmonthdate', 'format': '%d.%m.%Y'})
             for title, quote, container_type in (
                 ('USD/PLN', 'USD/PLN', 'flex_container'),
                 ('US 10Y', 'US 10Y', 'flex_container'),
@@ -192,6 +213,9 @@ class DashboardTests(unittest.TestCase):
         spec = json.loads(chart.proto.spec)
         self.assertEqual(spec['mark']['type'], 'line')
         self.assertEqual(spec['transform'][0]['fold'], ['Advancing issues', 'Declining issues'])
+        self.assertEqual(spec['encoding']['tooltip'][0],
+                         {'field': 'day', 'type': 'temporal', 'title': 'Trading date',
+                          'timeUnit': 'utcyearmonthdate', 'format': '%d.%m.%Y'})
 
     def test_unavailable_quotes(self):
         with patch('portfolio_app.market_data.fetch_quotes', return_value=({}, {'MSFT': 'offline', 'AAPL': 'offline'})):

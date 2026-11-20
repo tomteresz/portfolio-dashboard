@@ -23,6 +23,36 @@ def is_english(text):
         return False
 
 
+def _image_url(value):
+    if not isinstance(value, str) or any(char.isspace() or ord(char) < 32 for char in value):
+        return None
+    try:
+        parsed = urlsplit(value)
+        if parsed.scheme == "https" and parsed.hostname and parsed.username is None:
+            return value
+    except ValueError:
+        pass
+    return None
+
+
+def _thumbnail_url(thumbnail):
+    if not isinstance(thumbnail, dict):
+        return _image_url(thumbnail)
+    resolutions = thumbnail.get("resolutions")
+    candidates = []
+    for item in resolutions if isinstance(resolutions, list) else ():
+        if isinstance(item, dict) and (url := _image_url(item.get("url"))):
+            width = item.get("width")
+            if type(width) is int and width > 0:
+                candidates.append((width, url))
+    previews = [item for item in candidates if item[0] <= 480]
+    if previews:
+        return max(previews)[1]
+    if candidates:
+        return min(candidates)[1]
+    return _image_url(thumbnail.get("originalUrl"))
+
+
 def normalize_news(items, symbol, now=None):
     now = now or datetime.now(timezone.utc)
     articles, seen = [], set()
@@ -78,8 +108,12 @@ def normalize_news(items, symbol, now=None):
         seen.update((url, title_key))
         provider = content.get("provider") or {}
         publisher = provider.get("displayName") if isinstance(provider, dict) else str(provider)
+        thumbnail = _thumbnail_url(content.get("thumbnail"))
+        if thumbnail is None and content is not item:
+            thumbnail = _thumbnail_url(item.get("thumbnail"))
         articles.append({"title": title.strip(), "url": url, "published": published,
-                         "source": publisher or item.get("publisher") or "Yahoo Finance", "symbols": [symbol]})
+                         "source": publisher or item.get("publisher") or "Yahoo Finance", "symbols": [symbol],
+                         "thumbnail": thumbnail})
     return sorted(articles, key=lambda a: a["published"], reverse=True)
 
 
@@ -113,6 +147,8 @@ def select_headlines(feeds, per_company=10, limit=10):
             duplicate = by_url.get(article["url"]) or by_title.get(title)
             if duplicate:
                 duplicate["symbols"] = sorted(set(duplicate["symbols"] + article["symbols"]))
+                if not duplicate.get("thumbnail") and article.get("thumbnail"):
+                    duplicate["thumbnail"] = article["thumbnail"]
             else:
                 duplicate = {**article, "symbols": list(article["symbols"])}
                 combined.append(duplicate)

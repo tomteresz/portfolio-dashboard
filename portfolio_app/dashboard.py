@@ -3,6 +3,7 @@ from html import escape
 from hashlib import sha256
 import math
 import sqlite3
+from urllib.parse import quote as quote_url
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -16,7 +17,7 @@ from portfolio_app.investing_data import BENCHMARKS, fetch_benchmarks
 from portfolio_app.crude_oil import fetch_crude_oil
 from portfolio_app.holdings_table import column_metadata, render_table
 from portfolio_app.company_news import fetch_news_batch, select_headlines
-from portfolio_app.company_logos import ticker_logo
+from portfolio_app.company_logos import ticker_logo, ticker_logo_url
 from portfolio_app.parallel_data import parallel_loads
 from portfolio_app.company_calendar import exchange_today, fetch_calendars, upcoming_earnings
 from portfolio_app.market_sentiment import SOURCE_URL as SENTIMENT_SOURCE_URL, fetch_sentiment
@@ -103,6 +104,24 @@ h1 {font-size:1.9rem !important; padding-bottom:.4rem !important;}
 .extended-grid {display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;margin:12px 0;}
 .extended-row {display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;font-size:.9rem;flex-wrap:wrap;}
 .extended-time {color:#68717b;font-size:.73rem;margin-top:5px;}
+.news-grid {display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,490px),1fr)); gap:10px;}
+.news-card {display:grid; grid-template-columns:clamp(5.25rem,14vw,9rem) minmax(0,1fr); align-items:center;
+    gap:14px; padding:10px; border:1px solid #e4e8ed; border-radius:12px; background:#fff;
+    color:#202833 !important; text-decoration:none !important;}
+.news-card:hover {border-color:#a7b6c5; background:#fafbfd;}
+.news-card:hover .news-title {text-decoration:underline; text-underline-offset:3px;}
+.news-card:focus-visible {outline:2px solid #23659a; outline-offset:2px;}
+.news-image {position:relative; display:grid; place-content:center; align-self:center; aspect-ratio:4/3;
+    border-radius:8px; overflow:hidden; background:linear-gradient(135deg,#eaf1f6,#dce6ef); color:#294c6a;}
+.news-logo {width:32px; height:32px; margin:0 auto 4px; background: center / contain no-repeat;}
+.news-image-label {font-size:.68rem; font-weight:700; letter-spacing:.07em; text-align:center; overflow-wrap:anywhere;}
+.news-photo {position:absolute; inset:0; background: center / cover no-repeat;}
+.news-content {min-width:0; overflow-wrap:anywhere;}
+.news-card .news-title {margin:3px 0 6px; padding:0; font-size:.98rem; font-weight:650; line-height:1.35;}
+.news-symbols {color:#285775; font-size:.72rem; font-weight:650;}
+.news-byline {display:flex; flex-wrap:wrap; gap:2px 9px; color:#68717b; font-size:.73rem;}
+.news-byline time {white-space:nowrap;}
+@media(max-width:480px) {.news-card {gap:10px; padding:8px;}}
 .holding-title {display:flex; justify-content:space-between; align-items:center; gap:10px; font-weight:650;}
 .holding-title small {display:block; color:#68717b; font-size:.75rem; font-weight:400;}
 .holding-title > div {min-width:0;overflow-wrap:anywhere;}
@@ -289,6 +308,12 @@ def render_calendar(part, name, all_symbols):
             st.caption(tr("Ostatnie sprawdzenie: ") + display_time(min(times)))
 
 
+def news_image_style(url):
+    # Keep URL punctuation while escaping characters that could end the CSS string.
+    url = escape(quote_url(url, safe=":/?#[]@!$&'()*+,;=%"), quote=True)
+    return f'background-image:url(&quot;{url}&quot;)'
+
+
 def render_news(symbols):
     with st.expander(tr("Wiadomości spółek"), expanded=True, key="company-news", on_change="rerun") as news:
         if not news.open:
@@ -309,12 +334,26 @@ def render_news(symbols):
         articles = select_headlines(feeds)
         if not articles:
             st.info(tr("Brak aktualnych wiadomości dla spółek w portfelach."))
-        for article in articles:
-            st.caption(tr(f'{" · ".join(article["symbols"])} · {article["source"]} · {display_time(article["published"], "%d.%m.%Y %H:%M")}'))
-            st.html(tr(f'<a href="{escape(article["url"], quote=True)}" target="_blank" '
-                    f'rel="noopener noreferrer" style="color:#23659a;font-weight:600;line-height:1.5;'
-                    f'display:block;min-height:44px;box-sizing:border-box;padding:8px 0 14px;border-bottom:1px solid #e4e8ed;'
-                    f'overflow-wrap:anywhere">{escape(article["title"])}</a>'))
+        else:
+            cards = []
+            for article in articles:
+                symbol = article["symbols"][0]
+                thumbnail = article.get("thumbnail")
+                photo = f'<span class="news-photo" style="{news_image_style(thumbnail)}"></span>' if thumbnail else ""
+                published = article["published"]
+                cards.append(
+                    f'<a class="news-card" href="{escape(article["url"], quote=True)}" target="_blank" '
+                    'rel="noopener noreferrer">'
+                    f'<span class="news-image" aria-hidden="true">'
+                    f'<span class="news-logo" style="{news_image_style(ticker_logo_url(symbol))}"></span>'
+                    f'<span class="news-image-label">{escape(symbol)}</span>{photo}</span>'
+                    f'<div class="news-content"><div class="news-symbols">{escape(" · ".join(article["symbols"]))}</div>'
+                    f'<h3 class="news-title">{escape(article["title"])}</h3>'
+                    f'<div class="news-byline"><span>{escape(str(article["source"]))}</span>'
+                    f'<time datetime="{published.isoformat()}">{display_time(published, "%d.%m.%Y %H:%M")}</time>'
+                    '</div></div></a>'
+                )
+            st.html('<div class="news-grid">' + "".join(cards) + '</div>')
         if times:
             st.caption(tr("Ostatnie sprawdzenie: ") + display_time(min(times), "%H:%M"))
 
@@ -367,12 +406,11 @@ def return_metric(target, positions):
                        "Bez dywidend, prowizji i wpływu kursów walut."))
 
 
-def daily_driver_rates(day, quote):
+def daily_driver_rates(day, quote, history):
     live = quote is not None and quote["timestamp"].astimezone(EXCHANGE_ZONE).date() == day
     rate = quote["price"] if live else None
     previous = quote.get("previous_close") if live else None
     if previous is None and (live or day < datetime.now(EXCHANGE_ZONE).date()):
-        history = load_daily_history("PLN=X")
         session = day.isoformat()
         if not live:
             rate = next((point["level"] for point in history if point["day"] == session), None)
@@ -380,9 +418,9 @@ def daily_driver_rates(day, quote):
     return rate, previous, live
 
 
-def render_daily_drivers(positions, quote):
+def render_daily_drivers(positions, quote, fx_history):
     day = positions["Sesja"].iloc[0]
-    rate, previous_rate, live = daily_driver_rates(day, quote)
+    rate, previous_rate, live = daily_driver_rates(day, quote, fx_history)
     if rate is not None:
         rate = round(rate, 4)
     by_ticker = positions.groupby("Ticker")["Zmiana dzienna USD"].sum()
@@ -421,7 +459,7 @@ def render_daily_drivers(positions, quote):
             f'<small class="daily-drivers-note">{escape(note)}</small></section>')
 
 
-def summary(positions, fx, overall=False):
+def summary(positions, fx, fx_history, overall=False):
     value, cost = positions["Wartość"].sum(), positions["Kapitał"].sum()
     scope = "all" if overall else str(positions["Portfel"].iloc[0])
     change = daily_change(positions)
@@ -461,10 +499,9 @@ def summary(positions, fx, overall=False):
                     help_text = tr(error)
                 st.metric("USD/PLN", "—" if quote is None else f'{quote["price"]:.4f} PLN',
                           delta=delta, help=help_text)
-                render_daily_history(load_daily_history("PLN=X"), "USD/PLN", "USD/PLN", "usd-pln-history",
-                                     precision=4)
+                render_daily_history(fx_history, "USD/PLN", "USD/PLN", "usd-pln-history", precision=4)
     if change is not None:
-        render_daily_drivers(positions, quote)
+        render_daily_drivers(positions, quote, fx_history)
 
 
 def mobile_holdings(part, visible_columns):
@@ -627,6 +664,11 @@ def render_market_context(data_loader=load_market_context, cash_session=None, us
         st.metric("Equity Put/Call", "—" if not put_call else f'{put_call["value"]:.2f}', help=help_text)
 
 
+def trading_date_tooltip():
+    return {"field": "day", "type": "temporal", "title": tr("Data sesji"),
+            "timeUnit": "utcyearmonthdate", "format": "%d.%m.%Y"}
+
+
 def render_breadth_history(breadth, cash_session):
     now = datetime.now(EXCHANGE_ZONE)
     try:
@@ -636,7 +678,7 @@ def render_breadth_history(breadth, cash_session):
         st.caption(tr("Historia szerokości rynku jest chwilowo niedostępna."))
         return
     if not history:
-        st.caption(tr("Historia pojawi się po pierwszym odczycie zapisanym w ostatnich 30 minutach sesji USA."))
+        st.caption(tr("Historia pojawi się po pierwszym odczycie pobranym co najmniej 15 minut po zamknięciu sesji USA."))
         return
 
     label = tr("Rosnące / spadające · ostatnie 14 dni")
@@ -661,8 +703,7 @@ def render_breadth_history(breadth, cash_session):
                       "scale": {"domain": [advancing_label, declining_label],
                                 "range": ["#168047", "#c33935"]},
                       "legend": {"orient": "bottom", "columns": 1}},
-            "tooltip": [{"field": "day", "type": "temporal", "title": tr("Data sesji"),
-                         "formatType": "utc", "format": "%d.%m.%Y"},
+            "tooltip": [trading_date_tooltip(),
                         {"field": "net", "type": "quantitative", "title": tr("Bilans rynku"), "format": "+,d"},
                         {"field": advancing_label, "type": "quantitative", "format": ",d"},
                         {"field": declining_label, "type": "quantitative", "format": ",d"}],
@@ -704,8 +745,7 @@ def render_daily_history(history, name, value_label, key, *, precision=2, source
                   "axis": {"format": "%d.%m", "tickCount": "day", "labelAngle": 0}},
             "y": {"field": "level", "type": "quantitative", "title": None,
                   "scale": {"zero": False}, "axis": {"tickCount": 4}},
-            "tooltip": [{"field": "day", "type": "temporal", "title": tr("Data sesji"),
-                         "formatType": "utc", "format": "%d.%m.%Y"},
+            "tooltip": [trading_date_tooltip(),
                         {"field": "level", "type": "quantitative", "title": value_label, "format": f",.{precision}f"}],
         },
     }
@@ -824,7 +864,7 @@ def render_data_notes():
     st.caption(tr("Pozycje zapisane lokalnie w portfolio.json. Dane nie są synchronizowane z brokerem."))
 
 
-def render_portfolio(name, positions, total, fx):
+def render_portfolio(name, positions, total, fx, fx_history):
     part = positions.loc[positions["Portfel"] == name].copy()
     if part.empty:
         st.info(tr("Ten portfel nie ma pozycji."))
@@ -836,7 +876,7 @@ def render_portfolio(name, positions, total, fx):
             tr(f'<div class="portfolio-sub">{len(part)} pozycje · {value / total:.1%} całości · USD</div>'),
             unsafe_allow_html=True,
         )
-        summary(part, fx)
+        summary(part, fx, fx_history)
         st.markdown(tr('<div class="section-label">Posiadane akcje</div>'), unsafe_allow_html=True)
         visible_columns = column_settings(name)
         part["Udział %"] = part["Wartość"] / value * 100
@@ -1141,8 +1181,10 @@ def dashboard():
                      f'<span class="{color}">{change_text}</span></div>')
     st.markdown(tr('<div class="quote-strip">' + "".join(strip) + '</div>'), unsafe_allow_html=True)
     st.markdown(tr('<div class="section-label">Wszystkie portfele</div>'), unsafe_allow_html=True)
-    fx = load_usd_pln()
-    summary(positions, fx, overall=True)
+    with parallel_loads({"quote": load_usd_pln, "history": lambda: load_daily_history("PLN=X")}) as pending:
+        fx = pending["quote"].result()
+        fx_history = pending["history"].result()
+    summary(positions, fx, fx_history, overall=True)
     if positions["Poprzednie zamknięcie"].isna().any():
         st.info(tr("Brak poprzedniego zamknięcia dla części spółek. Ich zmiana dzienna i suma portfela są niedostępne."))
     elif positions["Sesja"].nunique() != 1:
@@ -1151,9 +1193,9 @@ def dashboard():
     # Per-symbol caches share market data between both rendered portfolios.
     long_tab, xtb_tab = st.tabs([portfolio_label(portfolio) for portfolio in PORTFOLIOS])
     with long_tab:
-        render_portfolio("Erste-DM", positions, value, fx)
+        render_portfolio("Erste-DM", positions, value, fx, fx_history)
     with xtb_tab:
-        render_portfolio("XTB", positions, value, fx)
+        render_portfolio("XTB", positions, value, fx, fx_history)
 
     render_calendar(calendar_positions, "all-portfolios", symbols)
     render_extended(calendar_positions, quotes, "all-portfolios")
