@@ -126,6 +126,18 @@ EN = {
         "Return relative to invested capital, excluding dividends, fees and exchange-rate changes.",
     "pozycje": "holdings", "całości": "of total", "dzisiaj": "today",
     "Spółka": "Company", "Ticker": "Ticker", "Symbol": "Symbol", "Cena": "Price", "Kurs": "Price",
+    "Co dziś zmieniło wartość portfela?": "What moved the portfolio today?",
+    "Największy dodatni wkład": "Top positive contributors",
+    "Największy ujemny wkład": "Top negative contributors",
+    "Brak pozycji": "None",
+    "Wpływ USD/PLN": "USD/PLN impact",
+    "Dzienna zmiana w PLN": "Daily change in PLN",
+    "Brakuje kursu USD/PLN dla tej sesji lub jego poprzedniego zamknięcia.":
+        "The USD/PLN rate for this session or its previous close is unavailable.",
+    "Do przeliczenia użyto historycznego zamknięcia USD/PLN z dnia":
+        "Converted using the historical USD/PLN close for",
+    "Wkład spółek w PLN po bieżącym kursie. Wpływ waluty względem poprzedniego zamknięcia USD/PLN.":
+        "Stock contributions use the current exchange rate. The currency impact uses the previous USD/PLN close.",
     "Akcje": "Shares", "Liczba akcji": "Number of shares", "Średnia": "Average cost",
     "Średni zakup": "Avg. cost", "Wartość": "Value", "Udział": "Weight",
     "Średnia cena zakupu": "Average purchase price", "Zwrot %": "Return %",

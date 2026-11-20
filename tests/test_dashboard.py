@@ -1,6 +1,6 @@
 """Offline smoke checks for the header and portfolio rendering."""
 from contextlib import ExitStack
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import tempfile
@@ -79,6 +79,63 @@ class DashboardTests(unittest.TestCase):
             self.assertFalse(app.exception, [e.message for e in app.exception])
             self.assertEqual(fetch.call_count, 1)
 
+    def test_daily_drivers_rank_aggregated_tickers_and_reconcile_pln(self):
+        stamp = (datetime.now(timezone.utc) - timedelta(days=2)).replace(hour=20, minute=0)
+        moves = {'MSFT': 5, 'AAPL': -4, 'CAT': 30, 'BA': 25, 'V': 8,
+                 'IBM': -50, 'AMZN': -40, 'KO': -1, 'GS': 0}
+        records = self.records + [dict(portfolio='XTB', symbol=symbol, name=symbol, shares=1, average_price=80)
+                                  for symbol in moves if symbol not in ('MSFT', 'AAPL')]
+        quotes = {symbol: dict(price=100 + move, previous_close=100, timestamp=stamp, fetched_at=stamp)
+                  for symbol, move in moves.items()}
+        news = {symbol: ([], None, stamp) for symbol in moves}
+        fx = dict(price=4.125, previous_close=4.0, timestamp=stamp)
+        fx_history = [{'day': (stamp - timedelta(days=1)).date().isoformat(), 'level': 4.0},
+                      {'day': stamp.date().isoformat(), 'level': 4.1},
+                      {'day': (stamp + timedelta(days=1)).date().isoformat(), 'level': 4.125}]
+        with (
+            patch('portfolio_app.portfolio_store.load_positions', return_value=records),
+            patch('portfolio_app.market_data.fetch_quotes', return_value=(quotes, {})),
+            patch('portfolio_app.company_news.fetch_news_batch', return_value=news),
+            patch('portfolio_app.market_data.fetch_usd_pln', return_value=(fx, None)) as fetch_fx,
+            patch('portfolio_app.market_data.fetch_daily_history',
+                  side_effect=lambda symbol, **kwargs: fx_history if symbol == 'PLN=X' else []) as fetch_history,
+        ):
+            app = self.render('en')
+            combined, erste, xtb = [item.proto.body for item in app.get('html')
+                                    if 'class="daily-drivers"' in item.proto.body]
+            self.assertIn('What moved the portfolio today?', combined)
+            self.assertLess(combined.index('>CAT<'), combined.index('>BA<'))
+            self.assertLess(combined.index('>BA<'), combined.index('>MSFT<'))
+            self.assertLess(combined.index('>IBM<'), combined.index('>AMZN<'))
+            self.assertLess(combined.index('>AMZN<'), combined.index('>AAPL<'))
+            self.assertNotIn('>V<', combined)
+            self.assertNotIn('>KO<', combined)
+            self.assertNotIn('>GS<', combined)
+            self.assertIn('+20.00</span></td><td>+82.50', combined)
+            self.assertIn('USD/PLN impact <strong>+162.50 PLN', combined)
+            self.assertIn('Daily change in PLN <strong>+96.50 PLN', combined)
+            self.assertIn('+10.00</span></td><td>+41.25', erste)
+            self.assertIn('+10.00</span></td><td>+41.25', xtb)
+            self.assertEqual([call.args[0] for call in fetch_history.call_args_list].count('PLN=X'), 1)
+
+            fetch_fx.return_value = ({**fx, 'timestamp': stamp + timedelta(days=1)}, None)
+            next(button for button in app.button if 'Refresh prices' in button.label).click().run()
+            self.assertFalse(app.exception, [e.message for e in app.exception])
+            combined = next(item.proto.body for item in app.get('html') if 'class="daily-drivers"' in item.proto.body)
+            self.assertIn('+20.00</span></td><td>+82.00', combined)
+            self.assertIn('USD/PLN impact <strong>+130.00 PLN', combined)
+            self.assertIn('Daily change in PLN <strong>+64.40 PLN', combined)
+            self.assertIn('Converted using the historical USD/PLN close', combined)
+            self.assertEqual([call.args[0] for call in fetch_history.call_args_list].count('PLN=X'), 2)
+
+            fx_history.pop(1)
+            next(button for button in app.button if 'Refresh prices' in button.label).click().run()
+            self.assertFalse(app.exception, [e.message for e in app.exception])
+            combined = next(item.proto.body for item in app.get('html') if 'class="daily-drivers"' in item.proto.body)
+            self.assertIn('+20.00</span></td><td>—', combined)
+            self.assertIn('USD/PLN impact <strong>—', combined)
+            self.assertIn('Daily change in PLN <strong>—', combined)
+
     def test_manual_refresh_reloads_parallel_market_data(self):
         history = [{'day': '2026-11-18', 'level': 17.25}, {'day': '2026-11-19', 'level': 16.8}]
         with (
@@ -93,12 +150,15 @@ class DashboardTests(unittest.TestCase):
                              ['metric', 'caption', 'vega_lite_chart'])
             self.assertEqual(elements[0].label, 'VIX · fear index')
             for title, quote, container_type in (
+                ('USD/PLN', 'USD/PLN', 'flex_container'),
                 ('US 10Y', 'US 10Y', 'flex_container'),
                 ('WTI', 'Crude Oil WTI (CL.F)', 'flex_container'),
                 ('Nasdaq 100', 'US Tech 100', 'column'),
                 ('S&P 500', 'US 500', 'column'),
             ):
-                caption = next(item for item in app.caption if item.value == f'{title} · last 14 days')
+                captions = [item for item in app.caption if item.value == f'{title} · last 14 days']
+                self.assertEqual(len(captions), 1)
+                caption, = captions
                 container = next(block for block in app.get(container_type) if caption in block.children.values())
                 *quote_elements, _, chart = container.children.values()
                 self.assertEqual(chart.type, 'vega_lite_chart')
@@ -109,11 +169,11 @@ class DashboardTests(unittest.TestCase):
                 else:
                     self.assertEqual(quote_elements[0].label, quote)
             self.assertCountEqual([call.args[0] for call in fetch_history.call_args_list],
-                                  ['^VIX', '^TNX', 'CL=F', '^NDX', '^GSPC'])
+                                  ['PLN=X', '^VIX', '^TNX', 'CL=F', '^NDX', '^GSPC'])
             next(button for button in app.button if 'Refresh prices' in button.label).click().run()
             self.assertFalse(app.exception, [e.message for e in app.exception])
             self.assertEqual(fetch.call_count, 2)
-            self.assertEqual(fetch_history.call_count, 10)
+            self.assertEqual(fetch_history.call_count, 12)
 
     def test_empty_portfolios(self):
         with patch('portfolio_app.portfolio_store.load_positions', return_value=[]):

@@ -15,7 +15,7 @@
 
 ---
 
-Version **v0.8**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
+Version **v0.9**. A Streamlit dashboard for the **Erste-DM** and **XTB** portfolios,
 with Polish and English interface options and English-only company news.
 Portfolio display names can be changed in the **Portfolio names** menu in the
 top toolbar. Names must be unique and contain 1-40 characters. Display names
@@ -25,7 +25,7 @@ Holdings are entered manually; the application does not connect to brokerage acc
 | 💼 Track your portfolios | 🌎 Follow the market | 📅 Stay informed |
 |---|---|---|
 | Holdings, weighted average prices and returns | VIX, US 10Y, breadth and Put/Call | Earnings and dividend dates |
-| USD values with PLN equivalents | Sector map, Cash instruments and futures | US economic calendar |
+| Daily gains and losses by holding in USD and PLN | Sector map, Cash instruments and futures | US economic calendar |
 | Saved columns and mobile holding cards | Pre-market and after-hours quotes | One shared English news feed |
 
 <details>
@@ -128,10 +128,19 @@ return since purchase, separately per portfolio and for all holdings together.
   Missing reference prices or mixed quote dates prevent incomplete totals.
 - Return since purchase compares market value with invested capital and excludes
   dividends, commissions and currency movements.
-- USD/PLN shows the rate and daily change. Total value, portfolio market values
-  and invested capital also have neutral PLN equivalents using the same rate
-  rounded to four decimals. Daily change and return since purchase show
-  percentages and USD amounts. Missing FX data produces a dash.
+- The **USD/PLN** tile in **All portfolios** shows the current rate, its daily
+  change and a 14-calendar-day chart of daily Yahoo Finance rates (`PLN=X`).
+  Total value, portfolio market values and invested capital use the current
+  rate rounded to four decimals for their PLN equivalents.
+- **What moved the portfolio today?** shows up to three positive and three
+  negative contributors in USD and PLN, for each portfolio and across all
+  holdings. The combined view adds together positions with the same ticker.
+- The daily breakdown converts stock contributions using the USD/PLN rate for
+  the quoted stock session. It reports the currency impact on the prior USD
+  value separately. When the live FX quote is from a different date, the app
+  uses the historical USD/PLN close for the stock session. The combined change
+  in PLN appears when both FX rates are available. Return since purchase uses
+  the USD acquisition cost. The app does not store your original FX rate.
 - Positive changes are green; negative changes are red, including VIX.
   Color indicates direction, not whether a move is favorable.
 
@@ -351,19 +360,18 @@ and query strings are not logged. WebSocket duration covers the whole connection
 
 ## 🧩 Dependencies and validation
 
-The five direct dependencies are Streamlit, pandas, yfinance, curl-cffi and langdetect.
-Pip installs their transitive dependencies. Separate Plotly, Docker and browser
-drivers are not required.
+`requirements.txt` lists Streamlit, pandas, yfinance, curl-cffi and langdetect.
+Pip also installs Starlette through Streamlit. The app uses it for its HTTP
+routes and request logging.
 
 ```powershell
 .\.env\Scripts\python.exe -m pip check
 .\.env\Scripts\python.exe -m unittest discover -s tests
 ```
 
-Automated checks have covered holdings lifecycle, weighted averages, aggregated
-dividends, missing providers, PL/EN rendering, cache behavior, Info controls,
-market-data parsers and DST conversion. They do not guarantee external source
-availability or visual compatibility with every browser and device.
+Automated checks cover PL/EN rendering, cache behavior, chart refresh, daily
+contributor rankings, the historical USD/PLN fallback, market-data parsers and
+authentication. Live data availability depends on the providers.
 
 <a id="deployment"></a>
 
@@ -412,6 +420,8 @@ SSH disconnects; configure its working directory and runtime write permissions.
 
 ## 🏷️ Releases
 
+- **v0.9** adds daily portfolio contributors in USD and PLN, a separate currency
+  impact with a historical FX fallback, and a 14-day USD/PLN chart.
 - **v0.8** adds 14-day charts for VIX, US 10Y, WTI, Nasdaq 100 and S&P 500,
   plus a two-line market breadth chart backed by locally saved Finviz readings.
 - **v0.7** updates the documentation to reflect the current dashboard, demo

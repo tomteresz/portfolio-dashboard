@@ -83,6 +83,20 @@ h1 {font-size:1.9rem !important; padding-bottom:.4rem !important;}
 .portfolio-name {font-size:1.15rem; font-weight:650; margin:16px 0 6px;
     padding-left:12px; border-left:3px solid #eda325;}
 .portfolio-sub {font-size:.8rem; color:#68717b; margin-bottom:14px;}
+.daily-drivers {max-width:840px; margin:0 auto; border:1px solid #e4e8ed; border-radius:12px;
+    padding:12px 16px; background:#fff;}
+.daily-drivers h3 {font-size:1rem; margin:0 0 8px; padding:0;}
+.daily-drivers-grid {display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,265px),1fr));
+    gap:8px 24px;}
+.daily-drivers table {width:100%; border-collapse:collapse; font-size:.82rem; font-variant-numeric:tabular-nums;}
+.daily-drivers th,.daily-drivers td {padding:4px 0 4px 8px; text-align:right; white-space:nowrap;}
+.daily-drivers th:first-child,.daily-drivers td:first-child {text-align:left; padding-left:0; white-space:normal;
+    overflow-wrap:anywhere;}
+.daily-drivers thead {color:#68717b; border-bottom:1px solid #e4e8ed;}
+.daily-drivers caption {text-align:left; color:inherit; font-weight:650; padding-bottom:4px;}
+.daily-drivers-footer {display:flex; flex-wrap:wrap; gap:4px 20px; border-top:1px solid #e4e8ed;
+    margin-top:8px; padding-top:8px; font-size:.82rem; font-variant-numeric:tabular-nums;}
+.daily-drivers-note {display:block; margin-top:4px; color:#68717b; font-size:.73rem;}
 [data-testid="stDataFrame"] {border-radius:10px; overflow:hidden; border:1px solid #e4e8ed;}
 .mobile-holdings {display:none;}
 .holding-card {background:#fff; border:1px solid #e4e8ed; border-radius:12px; padding:16px; margin-bottom:12px;}
@@ -155,7 +169,7 @@ def load_vix():
     return fetch_vix()
 
 
-@st.cache_data(ttl=300, max_entries=5, show_spinner=False)
+@st.cache_data(ttl=300, max_entries=6, show_spinner=False)
 def load_daily_history(symbol):
     return fetch_daily_history(symbol, positive=symbol not in ("CL=F", "^TNX"))
 
@@ -353,6 +367,60 @@ def return_metric(target, positions):
                        "Bez dywidend, prowizji i wpływu kursów walut."))
 
 
+def daily_driver_rates(day, quote):
+    live = quote is not None and quote["timestamp"].astimezone(EXCHANGE_ZONE).date() == day
+    rate = quote["price"] if live else None
+    previous = quote.get("previous_close") if live else None
+    if previous is None and (live or day < datetime.now(EXCHANGE_ZONE).date()):
+        history = load_daily_history("PLN=X")
+        session = day.isoformat()
+        if not live:
+            rate = next((point["level"] for point in history if point["day"] == session), None)
+        previous = next((point["level"] for point in reversed(history) if point["day"] < session), None)
+    return rate, previous, live
+
+
+def render_daily_drivers(positions, quote):
+    day = positions["Sesja"].iloc[0]
+    rate, previous_rate, live = daily_driver_rates(day, quote)
+    if rate is not None:
+        rate = round(rate, 4)
+    by_ticker = positions.groupby("Ticker")["Zmiana dzienna USD"].sum()
+    tables = []
+    for title, amounts, color in (
+        ("Największy dodatni wkład", by_ticker[by_ticker > 0].nlargest(3), "up"),
+        ("Największy ujemny wkład", by_ticker[by_ticker < 0].nsmallest(3), "down"),
+    ):
+        rows = []
+        for symbol, usd in amounts.items():
+            pln = "—" if rate is None else f'{usd * rate:+,.2f}'
+            rows.append(f'<tr><th scope="row">{escape(symbol)}</th>'
+                        f'<td><span class="{color}">{usd:+,.2f}</span></td><td>{pln}</td></tr>')
+        body = "".join(rows) or f'<tr><td colspan="3">{escape(tr("Brak pozycji"))}</td></tr>'
+        tables.append(f'<table><caption>{escape(tr(title))}</caption><thead><tr>'
+                      '<th scope="col">Ticker</th><th scope="col">USD</th><th scope="col">PLN</th>'
+                      f'</tr></thead><tbody>{body}</tbody></table>')
+
+    fx_text, total_text = "—", "—"
+    note = tr("Brakuje kursu USD/PLN dla tej sesji lub jego poprzedniego zamknięcia.")
+    if rate is not None and previous_rate is not None:
+        previous_value = positions["Wartość poprzednia"].sum()
+        # Use prior USD exposure for FX so the price and FX terms add to the PLN change.
+        fx_amount = previous_value * (rate - round(previous_rate, 4))
+        total_amount = by_ticker.sum() * rate + fx_amount
+        fx_text, total_text = f'{fx_amount:+,.2f} PLN', f'{total_amount:+,.2f} PLN'
+        note = tr("Wkład spółek w PLN po bieżącym kursie. Wpływ waluty względem poprzedniego zamknięcia USD/PLN.")
+        if not live:
+            note = tr("Do przeliczenia użyto historycznego zamknięcia USD/PLN z dnia") + f" {day:%d.%m.%Y}."
+
+    heading = escape(tr("Co dziś zmieniło wartość portfela?"))
+    st.html(f'<section class="daily-drivers" aria-label="{heading}"><h3>{heading}</h3>'
+            f'<div class="daily-drivers-grid">{"".join(tables)}</div>'
+            f'<div class="daily-drivers-footer"><span>{escape(tr("Wpływ USD/PLN"))} <strong>{fx_text}</strong></span>'
+            f'<span>{escape(tr("Dzienna zmiana w PLN"))} <strong>{total_text}</strong></span></div>'
+            f'<small class="daily-drivers-note">{escape(note)}</small></section>')
+
+
 def summary(positions, fx, overall=False):
     value, cost = positions["Wartość"].sum(), positions["Kapitał"].sum()
     scope = "all" if overall else str(positions["Portfel"].iloc[0])
@@ -393,6 +461,10 @@ def summary(positions, fx, overall=False):
                     help_text = tr(error)
                 st.metric("USD/PLN", "—" if quote is None else f'{quote["price"]:.4f} PLN',
                           delta=delta, help=help_text)
+                render_daily_history(load_daily_history("PLN=X"), "USD/PLN", "USD/PLN", "usd-pln-history",
+                                     precision=4)
+    if change is not None:
+        render_daily_drivers(positions, quote)
 
 
 def mobile_holdings(part, visible_columns):
