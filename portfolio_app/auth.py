@@ -1,22 +1,24 @@
 """Password verification and cookie-backed Streamlit authentication."""
-import hashlib
 import hmac
 import json
 
 import streamlit as st
 
 from portfolio_app.app_logging import configure_logs
-from portfolio_app.auth_sessions import AUTH_PATH, COOKIE_NAME, is_demo_mode, valid_session
+from portfolio_app.auth_sessions import COOKIE_NAME, is_demo_mode, valid_session
+from portfolio_app.credentials import AUTH_PATH, password_hash
 from portfolio_app.i18n import language, language_selector, tr
 
 
 def verify_credentials(username, password):
     if is_demo_mode():
         return hmac.compare_digest(username.encode("utf-8"), b"admin")
-    config = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
-    derived = hashlib.scrypt(password.encode("utf-8"), salt=bytes.fromhex(config["salt"]),
-                             n=16384, r=8, p=1, dklen=32)
-    password_ok = hmac.compare_digest(derived.hex(), config["password_hash"])
+    try:
+        config = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False
+    derived = password_hash(password, bytes.fromhex(config["salt"]))
+    password_ok = hmac.compare_digest(derived, config["password_hash"])
     username_ok = hmac.compare_digest(username.encode("utf-8"), config["username"].encode("utf-8"))
     return password_ok and username_ok
 
@@ -40,6 +42,10 @@ def login_dialog():
     @st.dialog(tr("Logowanie do MojePortfolio"), dismissible=False)
     def show():
         language_selector(key="login-language")
+        if not is_demo_mode() and not AUTH_PATH.exists():
+            st.info(tr("Brakuje pliku `data/auth.json`. Przywróć go z kopii zapasowej lub ustaw hasło administratora w terminalu w katalogu projektu. Następnie odśwież stronę."))
+            st.code("python -m portfolio_app.credentials", language="shell")
+            return
         st.caption(tr("Zaloguj się, aby przeglądać i modyfikować portfele."))
         error = st.query_params.get("login_error")
         if error:

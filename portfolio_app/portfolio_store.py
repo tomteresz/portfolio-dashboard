@@ -42,7 +42,10 @@ def validate_position(position):
 
 def load_positions(path=None):
     path = Path(path) if path is not None else PORTFOLIO_PATH
-    records = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        records = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
     if not isinstance(records, list):
         raise ValueError("Plik portfolio.json musi zawierać listę pozycji.")
     result, seen = [], set()
@@ -114,6 +117,7 @@ def remove_position(original, path=None):
 
 
 def _write_positions(records, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,

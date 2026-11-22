@@ -8,9 +8,10 @@ import sqlite3
 import time
 from contextlib import closing
 
+from portfolio_app.credentials import AUTH_PATH
+
 COOKIE_NAME = "portfolio_session"
 SESSION_SECONDS = 8 * 60 * 60
-AUTH_PATH = Path(__file__).resolve().parent.parent / "data" / "auth.json"
 # Streamlit can unload application modules while HTTP routes still reference
 # earlier imports. Keep the identity in process-local environment storage so
 # both imports agree. An inherited identity belongs to a different PID and

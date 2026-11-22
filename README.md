@@ -69,12 +69,22 @@ For first-time installation, use Python **3.12+**:
 ```powershell
 python -m venv .env
 .\.env\Scripts\python.exe -m pip install --no-cache-dir -r requirements.txt
+.\.env\Scripts\python.exe -m portfolio_app.credentials
 .\.env\Scripts\python.exe -m streamlit run app.py
 ```
 
 Skip environment creation if `.env` already works. Explicit Python paths do not
 require activation; `start.bat` activates the environment for you.
 `--no-cache-dir` avoids shared pip cache permission problems.
+
+On a fresh clone, `start.bat` prompts you in the terminal to set a password for
+**admin**. The credentials command above does the same for manual launches.
+Both portfolios start empty and the first holding you add creates
+`data/portfolio.json`.
+
+To move an existing installation, copy its private `data/` directory from your
+backup into the clone before starting. This restores your sign-in, holdings and
+saved settings. To keep just your sign-in, copy `data/auth.json`.
 
 Use `--server.headless=false` to open the browser or `--server.headless=true`
 to run without opening it. Restart the server after backend, configuration or
@@ -396,6 +406,7 @@ On macOS or Linux with Python 3.12+ available:
 cd /path/to/project
 python3 -m venv .env
 .env/bin/python -m pip install --no-cache-dir -r requirements.txt
+.env/bin/python -m portfolio_app.credentials
 .env/bin/python -m streamlit run app.py --server.headless=true
 ```
 
@@ -410,6 +421,11 @@ SSH disconnects; configure its working directory and runtime write permissions.
 
 - **pip permission errors:** use `--no-cache-dir` and the environment's Python.
 - **Missing modules:** install and run with the same `.env` interpreter.
+- **Missing `data/auth.json` after cloning.** Git excludes the private `data/`
+  directory. To keep your existing password, restore `data/auth.json` from your
+  backup. To choose a new password, run `python -m portfolio_app.credentials`
+  in the project directory with the virtual environment active. Refresh the
+  sign-in page and enter the password for **admin**.
 - **Method Not Allowed after sign-in:** start `app.py`, not `dashboard.py`.
 - **Sign-in loops after backend changes:** restart the server and refresh.
   Session identity is stable across module reloads within the same process.
@@ -427,7 +443,8 @@ SSH disconnects; configure its working directory and runtime write permissions.
 
 - **v0.10** adds company-news cards with thumbnails and ticker-logo fallbacks,
   fixes trading dates in chart tooltips, and loads the USD/PLN quote and history
-  in parallel.
+  in parallel. Fresh installations now support local admin password setup and
+  empty portfolios.
 - **v0.9** adds daily portfolio contributors in USD and PLN, a separate currency
   impact with a historical FX fallback, and a 14-day USD/PLN chart.
 - **v0.8** adds 14-day charts for VIX, US 10Y, WTI, Nasdaq 100 and S&P 500,

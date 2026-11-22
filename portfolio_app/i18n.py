@@ -106,6 +106,8 @@ EN = {
     "Moje<span>Portfolio": "My<span>Portfolio",
     "Moje portfolio": "My portfolio", "MojePortfolio": "MyPortfolio", "AKCJE USA": "US EQUITIES",
     "Logowanie do MojePortfolio": "Sign in to MyPortfolio",
+    "Brakuje pliku `data/auth.json`. Przywróć go z kopii zapasowej lub ustaw hasło administratora w terminalu w katalogu projektu. Następnie odśwież stronę.":
+        "`data/auth.json` is missing. Restore it from backup or set the admin password in a terminal in the project directory. Then refresh this page.",
     "Zaloguj się, aby przeglądać i modyfikować portfele.": "Sign in to view and edit your portfolios.",
     "Hasło": "Password", "Zaloguj się": "Sign in", "Wyloguj się": "Sign out", "Wyloguj": "Sign out",
     "Nieprawidłowy login lub hasło.": "Incorrect username or password.",
