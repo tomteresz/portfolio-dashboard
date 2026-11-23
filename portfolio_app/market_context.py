@@ -54,7 +54,7 @@ def _valid_day(day, now):
     return day
 
 
-def parse_put_call(html, now=None):
+def parse_put_call(html, now=None, *, expected_day=None):
     now = now or datetime.now(timezone.utc)
     page = _Page()
     page.feed(html)
@@ -67,8 +67,29 @@ def parse_put_call(html, now=None):
     match = re.search(r'"selectedDate"\s*:\s*"(\d{4}-\d{2}-\d{2})"', decoded)
     if not match:
         raise ValueError("Missing Cboe observation date")
-    day = _valid_day(datetime.strptime(match[1], "%Y-%m-%d").date(), now)
+    day = datetime.strptime(match[1], "%Y-%m-%d").date()
+    if expected_day is None:
+        _valid_day(day, now)
+    elif day != expected_day:
+        raise ValueError("Cboe returned a different trading date")
     return {"value": value, "as_of": day, "fetched_at": now}
+
+
+def fetch_put_call_history():
+    now = datetime.now(timezone.utc)
+    today = now.astimezone(EXCHANGE_ZONE).date()
+    days = [today - timedelta(days=offset) for offset in range(13, -1, -1)]
+
+    def fetch_day(day):
+        try:
+            reading = parse_put_call(_read(f"{CBOE_URL}?dt={day.isoformat()}"), now, expected_day=day)
+        except (OSError, ValueError, IndexError):
+            return None
+        return {"day": day.isoformat(), "level": reading["value"]}
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        return [row for row in pool.map(fetch_day, (day for day in days if day.weekday() < 5))
+                if row is not None]
 
 
 def parse_breadth(html, now=None):

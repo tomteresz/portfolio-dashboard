@@ -44,6 +44,7 @@ class DashboardTests(unittest.TestCase):
             'portfolio_app.market_data.fetch_daily_history': [],
             'portfolio_app.crude_oil.fetch_crude_oil': (None, 'Unavailable'),
             'portfolio_app.market_context.fetch_market_context': {},
+            'portfolio_app.market_context.fetch_put_call_history': [],
             'portfolio_app.breadth_history.load_breadth_history': [],
             'portfolio_app.market_sentiment.fetch_sentiment': (None, 'Unavailable'),
             'portfolio_app.market_overview.fetch_sectors': {},
@@ -159,6 +160,7 @@ class DashboardTests(unittest.TestCase):
         with (
             patch('portfolio_app.market_data.fetch_vix', return_value=(None, 'Unavailable')) as fetch,
             patch('portfolio_app.market_data.fetch_daily_history', return_value=history) as fetch_history,
+            patch('portfolio_app.market_context.fetch_put_call_history', return_value=history),
         ):
             app = self.render('en')
             caption = next(item for item in app.caption if item.value == 'VIX · last 14 days')
@@ -173,6 +175,7 @@ class DashboardTests(unittest.TestCase):
             for title, quote, container_type in (
                 ('USD/PLN', 'USD/PLN', 'flex_container'),
                 ('US 10Y', 'US 10Y', 'flex_container'),
+                ('Equity Put/Call', 'Equity Put/Call', 'flex_container'),
                 ('WTI', 'Crude Oil WTI (CL.F)', 'flex_container'),
                 ('Nasdaq 100', 'US Tech 100', 'column'),
                 ('S&P 500', 'US 500', 'column'),
@@ -211,6 +214,9 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(metric.label, 'Market · advancing / declining')
         self.assertEqual(chart.type, 'vega_lite_chart')
         spec = json.loads(chart.proto.spec)
+        self.assertIsNone(spec['encoding']['color']['legend'])
+        self.assertEqual(spec['encoding']['color']['scale']['range'], ['#168047', '#c33935'])
+        self.assertEqual(spec['height'], 105)
         self.assertEqual(spec['mark']['type'], 'line')
         self.assertEqual(spec['transform'][0]['fold'], ['Advancing issues', 'Declining issues'])
         self.assertEqual(spec['encoding']['tooltip'][0],

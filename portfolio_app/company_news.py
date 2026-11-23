@@ -154,4 +154,14 @@ def select_headlines(feeds, per_company=10, limit=10):
                 combined.append(duplicate)
             by_url[article["url"]] = duplicate
             by_title[title] = duplicate
-    return sorted(combined, key=lambda a: a["published"], reverse=True)[:limit]
+    remaining = sorted(combined, key=lambda a: a["published"], reverse=True)
+    counts = {symbol: 0 for article in remaining for symbol in article["symbols"]}
+    selected = []
+    while remaining and len(selected) < limit:
+        # Among equally represented tickers, prefer the newest available story.
+        article = min(remaining, key=lambda a: min(counts[symbol] for symbol in a["symbols"]))
+        remaining.remove(article)
+        selected.append(article)
+        for symbol in article["symbols"]:
+            counts[symbol] += 1
+    return sorted(selected, key=lambda a: a["published"], reverse=True)

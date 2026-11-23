@@ -270,11 +270,13 @@ Dates and retrieval times are available in tooltips where appropriate. Finviz
 does not provide an observation timestamp. Indicators do not affect portfolio
 valuation. Missing values are dashes.
 
-The breadth chart shows advancing and declining counts as two lines over the
-last 14 calendar days. When the dashboard refreshes, it saves the latest Finviz
+The compact breadth chart uses a green line for advancing issues and a red line
+for declining issues over the last 14 calendar days. Hover over a point to see
+both counts and net advances. When the dashboard refreshes, it saves the latest Finviz
 reading fetched at least 15 minutes after that day's regular US session closes
 in `market_breadth.sqlite3` beside the portfolio file. History starts with the
-first saved reading.
+first saved reading. Equity Put/Call has its own chart showing available daily
+Cboe equity put/call ratios from the last 14 calendar days.
 
 The 14-day line charts use daily Yahoo Finance data for VIX (`^VIX`), US 10Y
 (`^TNX`), WTI futures (`CL=F`), and the Nasdaq 100 and S&P 500 cash indexes
@@ -306,7 +308,9 @@ days old, and not future-dated. Gauge bands are extreme fear below 25, fear belo
 The common company-news feed covers both portfolios and shows up to **10
 deduplicated English articles from the last seven days**, with source, time and
 links. Cards show a publisher thumbnail when available and a ticker logo as the
-fallback. Articles are sorted by publication date. Some publishers require
+fallback. Each slot goes to the ticker with the fewest stories selected so far
+and an article available. The newest story wins ties. The feed displays the
+selected articles in reverse chronological order. Some publishers require
 subscriptions.
 
 Quotes refresh every **60 seconds** while the sidebar option is enabled.
@@ -444,7 +448,8 @@ SSH disconnects; configure its working directory and runtime write permissions.
 - **v0.10** adds company-news cards with thumbnails and ticker-logo fallbacks,
   fixes trading dates in chart tooltips, and loads the USD/PLN quote and history
   in parallel. Fresh installations now support local admin password setup and
-  empty portfolios.
+  empty portfolios. This release also balances headlines across tickers and
+  adds a 14-day Equity Put/Call chart alongside the compact breadth chart.
 - **v0.9** adds daily portfolio contributors in USD and PLN, a separate currency
   impact with a historical FX fallback, and a 14-day USD/PLN chart.
 - **v0.8** adds 14-day charts for VIX, US 10Y, WTI, Nasdaq 100 and S&P 500,

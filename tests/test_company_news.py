@@ -1,5 +1,5 @@
 """Regression coverage for Yahoo article artwork and duplicate feeds."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
 
@@ -7,6 +7,18 @@ from portfolio_app.company_news import normalize_news, select_headlines
 
 
 class CompanyNewsTests(unittest.TestCase):
+    def test_busy_ticker_shares_slots_with_older_company_news(self):
+        now = datetime(2026, 11, 20, 15, tzinfo=timezone.utc)
+
+        def stories(symbol, hours_ago):
+            return [{"title": f"{symbol} {i}", "url": f"https://example.com/{symbol}/{i}",
+                     "published": now - timedelta(hours=hours_ago, minutes=i), "symbols": [symbol]}
+                    for i in range(10)]
+
+        nvda, aapl, msft = stories("NVDA", 0), stories("AAPL", 1), stories("MSFT", 2)
+        self.assertEqual(select_headlines([nvda, aapl, msft]), nvda[:4] + aapl[:3] + msft[:3])
+        self.assertEqual(select_headlines([nvda, aapl[:1], []]), nvda[:9] + aapl[:1])
+
     def test_news_prefers_a_preview_and_ignores_invalid_image_urls(self):
         now = datetime(2026, 11, 20, 15, tzinfo=timezone.utc)
         image = "https://s.yimg.com/news/preview.jpg"

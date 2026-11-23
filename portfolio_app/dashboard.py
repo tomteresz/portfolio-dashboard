@@ -21,7 +21,7 @@ from portfolio_app.company_logos import ticker_logo, ticker_logo_url
 from portfolio_app.parallel_data import parallel_loads
 from portfolio_app.company_calendar import exchange_today, fetch_calendars, upcoming_earnings
 from portfolio_app.market_sentiment import SOURCE_URL as SENTIMENT_SOURCE_URL, fetch_sentiment
-from portfolio_app.market_context import EXCHANGE_ZONE, fetch_market_context
+from portfolio_app.market_context import EXCHANGE_ZONE, fetch_market_context, fetch_put_call_history
 from portfolio_app.breadth_history import BREADTH_HISTORY_DAYS, load_breadth_history
 from portfolio_app.market_overview import SECTORS, fetch_sectors, fetch_macro_calendar, upcoming_macro
 from portfolio_app.auth import require_login, logout_button, is_authenticated
@@ -157,6 +157,7 @@ h1 {font-size:1.9rem !important; padding-bottom:.4rem !important;}
 
 COLORS = {"INTC": "#8062d6", "MSFT": "#3e98b5", "AMZN": "#e6ae58", "GOOGL": "#64b79c"}
 DISPLAY_TIMEZONE = ZoneInfo("Europe/Warsaw")
+HISTORY_CHART_HEIGHT = 105
 BENCHMARK_CHARTS = {"1175151": ("Nasdaq 100", "^NDX"), "1175153": ("S&P 500", "^GSPC")}
 
 
@@ -201,6 +202,11 @@ def load_crude_oil():
 @st.cache_data(ttl=600, max_entries=1, show_spinner=False)
 def load_market_context():
     return fetch_market_context()
+
+
+@st.cache_data(ttl=600, max_entries=1, show_spinner=False)
+def load_put_call_history():
+    return fetch_put_call_history()
 
 
 @st.cache_data(ttl=300, max_entries=1, show_spinner=False)
@@ -573,6 +579,7 @@ def render_extended(part, quotes, name):
         **{symbol: lambda symbol=symbol: load_daily_history(symbol) for symbol in benchmark_tickers},
         "vix": load_vix, "crude_oil": load_crude_oil,
         "context": load_market_context, "sentiment": load_sentiment,
+        "put_call_history": load_put_call_history,
         **{symbol: lambda symbol=symbol: load_daily_history(symbol)
            for symbol in ("^VIX", "CL=F", "^TNX")},
     }) as pending:
@@ -583,7 +590,8 @@ def render_extended(part, quotes, name):
         with st.container(horizontal=True, horizontal_alignment="center"):
             render_vix(pending["vix"].result, pending["^VIX"].result())
             render_crude_oil(pending["crude_oil"].result, pending["CL=F"].result())
-            render_market_context(pending["context"].result, cash_session, pending["^TNX"].result())
+            render_market_context(pending["context"].result, cash_session, pending["^TNX"].result(),
+                                  pending["put_call_history"].result())
         render_sector_map()
         render_macro_calendar()
         with st.container(horizontal_alignment="center"):
@@ -626,7 +634,7 @@ def render_macro_calendar():
         st.html('<div class="extended-grid">' + "".join(cards) + '</div>')
 
 
-def render_market_context(data_loader=load_market_context, cash_session=None, us10y_history=()):
+def render_market_context(data_loader=load_market_context, cash_session=None, us10y_history=(), put_call_history=()):
     data = data_loader()
     us10y = data.get("us10y")
     with st.container(width=260):
@@ -662,6 +670,7 @@ def render_market_context(data_loader=load_market_context, cash_session=None, us
         else:
             help_text = tr("Dane chwilowo niedostępne.")
         st.metric("Equity Put/Call", "—" if not put_call else f'{put_call["value"]:.2f}', help=help_text)
+        render_daily_history(put_call_history, "Equity Put/Call", "Equity Put/Call", "put-call-history", source="Cboe")
 
 
 def trading_date_tooltip():
@@ -691,7 +700,7 @@ def render_breadth_history(breadth, cash_session):
     advancing_label, declining_label = tr("Rosnące walory"), tr("Spadające walory")
     history = pd.DataFrame(history).rename(columns={"advancing": advancing_label, "declining": declining_label})
     spec = {
-        "height": 105,
+        "height": HISTORY_CHART_HEIGHT,
         "transform": [{"fold": [advancing_label, declining_label], "as": ["series", "count"]}],
         "mark": {"type": "line", "point": True},
         "encoding": {
@@ -702,7 +711,7 @@ def render_breadth_history(breadth, cash_session):
             "color": {"field": "series", "type": "nominal", "title": None,
                       "scale": {"domain": [advancing_label, declining_label],
                                 "range": ["#168047", "#c33935"]},
-                      "legend": {"orient": "bottom", "columns": 1}},
+                      "legend": None},
             "tooltip": [trading_date_tooltip(),
                         {"field": "net", "type": "quantitative", "title": tr("Bilans rynku"), "format": "+,d"},
                         {"field": advancing_label, "type": "quantitative", "format": ",d"},
@@ -738,7 +747,7 @@ def render_daily_history(history, name, value_label, key, *, precision=2, source
     label = name + " · " + tr("ostatnie 14 dni")
     st.caption(label, help=source)
     spec = {
-        "height": 105,
+        "height": HISTORY_CHART_HEIGHT,
         "mark": {"type": "line", "point": True},
         "encoding": {
             "x": {"field": "day", "type": "temporal", "title": None, "scale": {"type": "utc"},
@@ -1125,6 +1134,7 @@ def dashboard():
             load_daily_history.clear()
             load_crude_oil.clear()
             load_market_context.clear()
+            load_put_call_history.clear()
             load_sectors.clear()
             load_macro_calendar.clear()
             load_benchmarks.clear()
