@@ -31,6 +31,7 @@ Holdings are entered manually; the application does not connect to brokerage acc
 <details>
 <summary><strong>📚 Contents</strong></summary>
 
+- [Screenshots](#screenshots)
 - [Start on Windows](#quick-start)
 - [Demo mode](#demo)
 - [Sign-in and language](#sign-in)
@@ -46,6 +47,18 @@ Holdings are entered manually; the application does not connect to brokerage acc
 - [Releases](#releases)
 
 </details>
+
+## Screenshots
+
+Both screenshots use fictional holdings and sample market data.
+
+### Portfolio overview
+
+![Portfolio totals, USD/PLN history and daily gains and losses by ticker](docs/screenshots/portfolio-dashboard.png)
+
+### Market indicators
+
+![VIX, WTI, US 10Y, market breadth and Equity Put/Call with their 14-day charts](docs/screenshots/market-overview.png)
 
 <a id="quick-start"></a>
 
