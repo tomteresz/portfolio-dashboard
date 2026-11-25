@@ -191,6 +191,7 @@ EN = {
     "Pozycja zmieniła się od otwarcia formularza. Odśwież stronę i spróbuj ponownie.":
         "This holding changed after the form was opened. Refresh the page and try again.",
     "Liczba akcji musi być dodatnią, skończoną liczbą.": "The number of shares must be a positive finite number.",
+    "Podaj liczbę akcji w pełnych sztukach.": "Enter a whole number of shares.",
     "Średnia cena zakupu musi być dodatnią, skończoną liczbą.": "The average purchase price must be a positive finite number.",
 }
 

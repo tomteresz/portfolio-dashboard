@@ -9,11 +9,12 @@ import tempfile
 from threading import RLock
 
 PORTFOLIOS = ("Erste-DM", "XTB")
+SHARE_DECIMALS = {"Erste-DM": 0, "XTB": 4}
 PORTFOLIO_PATH = Path(os.environ.get("PORTFOLIO_PATH", str(Path(__file__).resolve().parent.parent / "data" / "portfolio.json")))
 _LOCK = RLock()
 
 
-def validate_position(position):
+def validate_position(position, *, enforce_whole_shares=False):
     symbol = str(position.get("symbol", "")).strip().upper()
     name = str(position.get("name", "")).strip() or symbol
     portfolio = position.get("portfolio")
@@ -34,6 +35,8 @@ def validate_position(position):
         if isinstance(position.get(key), bool) or not math.isfinite(value) or value <= 0:
             raise ValueError(f"{label} musi być dodatnią, skończoną liczbą.")
         numbers[key] = value
+    if enforce_whole_shares and SHARE_DECIMALS[portfolio] == 0 and not numbers["shares"].is_integer():
+        raise ValueError("Podaj liczbę akcji w pełnych sztukach.")
     cost = numbers["shares"] * numbers["average_price"]
     if not math.isfinite(cost) or cost <= 0:
         raise ValueError("Wartość pozycji musi być dodatnią, skończoną liczbą.")
@@ -62,7 +65,7 @@ def load_positions(path=None):
 
 
 def update_position(original, replacement, path=None):
-    replacement = validate_position(replacement)
+    replacement = validate_position(replacement, enforce_whole_shares=True)
     path = Path(path) if path is not None else PORTFOLIO_PATH
     with _LOCK:
         records = load_positions(path)
@@ -80,7 +83,7 @@ def update_position(original, replacement, path=None):
 
 def add_position(position, path=None):
     """Add a first purchase or merge it into the current weighted average."""
-    purchase = validate_position(position)
+    purchase = validate_position(position, enforce_whole_shares=True)
     path = Path(path) if path is not None else PORTFOLIO_PATH
     with _LOCK:
         records = load_positions(path)

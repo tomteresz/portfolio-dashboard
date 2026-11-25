@@ -146,6 +146,9 @@ Choose Erste-DM or XTB. Tab switching happens in the browser to preserve scroll
 position. Summaries cover market value, invested capital, daily change and
 return since purchase, separately per portfolio and for all holdings together.
 
+- When adding or editing a position, Erste-DM accepts whole shares and XTB
+  supports fractional shares with four decimal places. The holdings table
+  and mobile view display quantities using the portfolio's precision.
 - Daily position change in USD is `shares * (price - previous session close)`.
   Portfolio daily percentages are weighted by previous-close position values.
   Missing reference prices or mixed quote dates prevent incomplete totals.

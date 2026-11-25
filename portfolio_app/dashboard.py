@@ -28,7 +28,7 @@ from portfolio_app.auth import require_login, logout_button, is_authenticated
 from portfolio_app.i18n import tr, language, language_selector
 from portfolio_app.app_logging import configure_logs
 from portfolio_app.layout_store import COLUMNS, LABELS, columns_for, save_columns
-from portfolio_app.portfolio_store import PORTFOLIOS, add_position, load_positions, remove_position, update_position, validate_position
+from portfolio_app.portfolio_store import PORTFOLIOS, SHARE_DECIMALS, add_position, load_positions, remove_position, update_position, validate_position
 from portfolio_app.portfolio_names import load_portfolio_names, rename_portfolio
 
 st.set_page_config(page_title="MyPortfolio manager", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
@@ -510,11 +510,11 @@ def summary(positions, fx, fx_history, overall=False):
         render_daily_drivers(positions, quote, fx_history)
 
 
-def mobile_holdings(part, visible_columns):
+def mobile_holdings(part, visible_columns, portfolio):
     if not visible_columns:
         st.html('<div class="mobile-holdings">' + escape(tr("Wszystkie kolumny ukryte. Wybierz kolumny w menu Widoczne kolumny.")) + '</div>')
         return
-    columns = [column_metadata(column) for column in visible_columns]
+    columns = [column_metadata(column, portfolio) for column in visible_columns]
     cards = []
     for _, row in part.iterrows():
         fields = []
@@ -529,7 +529,7 @@ def mobile_holdings(part, visible_columns):
                 text = "—"
             else:
                 sign = "+" if column["signed"] and value >= 0 else ""
-                digits = 1 if column["kind"] == "weight" else 2
+                digits = column["digits"]
                 prefix = "$" if column["kind"] == "money" else ""
                 suffix = "%" if column["kind"] in ("percent", "weight") else ""
                 text = f"{sign}{prefix}{value:,.{digits}f}{suffix}"
@@ -889,7 +889,7 @@ def render_portfolio(name, positions, total, fx, fx_history):
         st.markdown(tr('<div class="section-label">Posiadane akcje</div>'), unsafe_allow_html=True)
         visible_columns = column_settings(name)
         part["Udział %"] = part["Wartość"] / value * 100
-        mobile_holdings(part, visible_columns)
+        mobile_holdings(part, visible_columns, name)
         with st.container(key=f"desktop-holdings-{name}"):
             render_holdings_table(part, visible_columns, name)
         with st.expander(tr("Struktura portfela"), key=f"structure-{name}", on_change="rerun") as allocation:
@@ -1028,12 +1028,13 @@ def add_position_form(records):
             st.session_state.pop(key, None)
     with st.popover(tr("＋ Dodaj pozycję")):
         st.caption(tr("Nowy symbol tworzy pozycję. Dla istniejącego dopisujemy akcje i przeliczamy średnią ważoną."))
+        labels = {p: portfolio_label(p) for p in PORTFOLIOS}
+        portfolio = st.selectbox(tr("Portfel"), PORTFOLIOS, key="add-portfolio", format_func=labels.__getitem__)
+        digits = SHARE_DECIMALS[portfolio]
         with st.form("add-position", clear_on_submit=False):
-            labels = {p: portfolio_label(p) for p in PORTFOLIOS}
-            portfolio = st.selectbox(tr("Portfel"), PORTFOLIOS, key="add-portfolio", format_func=labels.__getitem__)
             symbol = st.text_input(tr("Symbol Yahoo Finance"), max_chars=25, placeholder="AAPL", key="add-symbol")
             shares = st.number_input(tr("Liczba kupionych akcji"), min_value=0.0, value=0.0,
-                                     step=1.0, format="%.4f", key="add-shares")
+                                     step=10.0 ** -digits, format=f"%.{digits}f", key="add-shares")
             price = st.number_input(tr("Cena zakupu jednej akcji (USD)"), min_value=0.0, value=0.0,
                                     step=0.01, format="%.4f", key="add-price")
             submitted = st.form_submit_button(tr("Dodaj zakup"), width="stretch")
@@ -1041,7 +1042,7 @@ def add_position_form(records):
             require_login()
             try:
                 purchase = validate_position({"portfolio": portfolio, "symbol": symbol,
-                                              "shares": shares, "average_price": price})
+                                              "shares": shares, "average_price": price}, enforce_whole_shares=True)
                 known = next((r for r in records if r["symbol"] == purchase["symbol"]), None)
                 purchase["name"] = known["name"] if known else lookup_company(purchase["symbol"])
                 result = add_position(purchase)
@@ -1065,11 +1066,12 @@ def edit_position_form(records):
                              format_func=labels.__getitem__,
                              key="edit-selected")
         original = records[index]
+        digits = SHARE_DECIMALS[original["portfolio"]]
         identity = "edit-" + str(tuple(original.values()))
         st.caption(tr("Podaj łączną liczbę posiadanych akcji i aktualną średnią cenę zakupu. Zapis zastępuje poprzednie wartości."))
         with st.form(identity):
             shares = st.number_input(tr("Liczba akcji"), min_value=0.0, value=original["shares"],
-                                     step=1.0, format="%.4f", key=identity+"-shares")
+                                     step=10.0 ** -digits, format=f"%.{digits}f", key=identity+"-shares")
             average = st.number_input(tr("Średnia cena zakupu (USD)"), min_value=0.0, value=original["average_price"],
                                       step=0.01, format="%.4f", key=identity+"-average")
             submitted = st.form_submit_button(tr("Zapisz zmiany"), width="stretch")

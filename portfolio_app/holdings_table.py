@@ -8,6 +8,7 @@ from portfolio_app.app_logging import configure_logs
 from portfolio_app.auth import is_authenticated
 from portfolio_app.i18n import language, tr
 from portfolio_app.layout_store import COLUMNS, LABELS, columns_for, reorder_columns
+from portfolio_app.portfolio_store import SHARE_DECIMALS
 
 CSS = """
 .viewport {overflow:auto;border:1px solid #e4e8ed;border-radius:10px;background:white;max-width:100%;}
@@ -52,7 +53,7 @@ export default function(component) {
     if (value == null) return '—';
     if (col.kind === 'text') return String(value);
     const sign = col.signed && value >= 0 ? '+' : '';
-    const digits = col.kind === 'weight' ? 1 : 2;
+    const digits = col.digits;
     const number = Number(value).toLocaleString('en-US', {minimumFractionDigits:digits,maximumFractionDigits:digits});
     if (col.kind === 'money') return sign + '$' + number;
     return sign + number + (col.kind === 'percent' || col.kind === 'weight' ? '%' : '');
@@ -177,10 +178,11 @@ _TABLE = st.components.v2.component("portfolio_holdings", html='<div class="port
                                      css=CSS, js=JS)
 
 
-def column_metadata(column):
+def column_metadata(column, portfolio):
     kind = ("text" if column in ("Spółka", "Ticker") else "shares" if column == "Akcje"
             else "weight" if column == "Udział %" else "percent" if "%" in column else "money")
-    return {"id": column, "label": tr(LABELS.get(column, column)), "kind": kind,
+    digits = {"shares": SHARE_DECIMALS[portfolio], "weight": 1}.get(kind, 2)
+    return {"id": column, "label": tr(LABELS.get(column, column)), "kind": kind, "digits": digits,
             "signed": column in ("Zmiana dzienna %", "Zmiana dzienna USD", "Zwrot USD", "Zwrot %", "Pre-market %", "After-hours %")}
 
 
@@ -224,7 +226,7 @@ def render_table(part, visible_columns, name, display_name=None):
                 values[column] = number if math.isfinite(number) else None
         rows.append(values)
     return _TABLE(key=key, width="stretch", on_order_changed_change=changed,
-                  data={"columns": [column_metadata(c) for c in visible_columns], "rows": rows,
+                  data={"columns": [column_metadata(c, name) for c in visible_columns], "rows": rows,
                         "label": tr("Posiadane akcje") + " — " + (display_name or name),
                         "dragHelp": tr("Przeciągnij, aby zmienić kolejność. Klawiatura: Alt + strzałka."),
                         "sortHelp": tr("Kliknij, aby posortować"),
